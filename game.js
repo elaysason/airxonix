@@ -33,6 +33,7 @@ let player;
 let cursors;             // Stores arrow key states
 let currentDir = {x:0, y:0}; // Where we are moving NOW
 let nextDir = {x:0, y:0};    // Where we WANT to move (Input Buffer)
+let dirStack = [];           // Currently-held directions, in press order (last = most recent)
 let PLAYER_SPEED = 4;       // Speed: 4 = Normal, 8 = Fast
 let isMoving = false;     
 let targetPos = {x: 0, y: 0};
@@ -241,6 +242,7 @@ function create() {
     targetPos = {x: 0, y: 0};   
     currentDir = {x:0, y:0};
     nextDir = {x:0, y:0};
+    dirStack = [];
     PLAYER_SPEED = 4;
     // Only reset score if it's Level 1
     if (level === 1) score = 0;
@@ -284,6 +286,7 @@ function create() {
     player = this.physics.add.sprite(0, 0, 'player');
     player.setOrigin(0);
     player.body.setSize(14, 14);
+    player.body.setOffset(3, 3); // Center the 14x14 body within the 20x20 sprite
     player.setDepth(100);
 
 // 5. ADD PARTICLES
@@ -317,6 +320,27 @@ function create() {
     keyA = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
     keyS = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S);
     keyD = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
+
+    // Direction stack: newest pressed key wins, falls back to older still-held key on release
+    dirStack = [];
+    const bindDir = (key, dir) => {
+        key.on('down', () => {
+            // Remove any stale entry for this exact key, then push as most-recent
+            dirStack = dirStack.filter(e => e.key !== key);
+            dirStack.push({ key, dir });
+        });
+        key.on('up', () => {
+            dirStack = dirStack.filter(e => e.key !== key);
+        });
+    };
+    bindDir(cursors.left,  { x: -1, y: 0 });
+    bindDir(keyA,          { x: -1, y: 0 });
+    bindDir(cursors.right, { x: 1, y: 0 });
+    bindDir(keyD,          { x: 1, y: 0 });
+    bindDir(cursors.up,    { x: 0, y: -1 });
+    bindDir(keyW,          { x: 0, y: -1 });
+    bindDir(cursors.down,  { x: 0, y: 1 });
+    bindDir(keyS,          { x: 0, y: 1 });
     
     // Pause key (ESC or P)
     this.input.keyboard.on('keydown-ESC', togglePause);
@@ -452,18 +476,9 @@ function update(time, delta) {
     if (isGameOver || isPaused || !gameStarted) return;
 
     // 1. INPUT BUFFERING (Captures key presses anytime)
-    // Now checks for Arrows OR WASD
-    if (cursors.left.isDown || keyA.isDown) {
-        nextDir = { x: -1, y: 0 };
-    } 
-    else if (cursors.right.isDown || keyD.isDown) {
-        nextDir = { x: 1, y: 0 };
-    } 
-    else if (cursors.up.isDown || keyW.isDown) {
-        nextDir = { x: 0, y: -1 };
-    } 
-    else if (cursors.down.isDown || keyS.isDown) {
-        nextDir = { x: 0, y: 1 };
+    // Most-recently-pressed direction still held wins (falls back to older held key)
+    if (dirStack.length > 0) {
+        nextDir = dirStack[dirStack.length - 1].dir;
     }
 
     // 2. MOVEMENT ENGINE (Runs every frame for smooth sliding)
@@ -484,7 +499,10 @@ function update(time, delta) {
         }
         
         // Player Collision (Reduced hitbox slightly for fairness)
-        let dist = Phaser.Math.Distance.Between(ball.x, ball.y, player.x, player.y);
+        // Player has origin (0,0), so its center is offset by half a tile
+        let playerCX = player.x + TILE_SIZE / 2;
+        let playerCY = player.y + TILE_SIZE / 2;
+        let dist = Phaser.Math.Distance.Between(ball.x, ball.y, playerCX, playerCY);
         if (dist < 15 && !activePowerups.shield) {
             showGameOver();
         }
@@ -536,11 +554,11 @@ function processMovement() {
     // 1. Direction Logic
     if (nextDir.x !== 0 || nextDir.y !== 0) {
         if (standingOnLand) {
-            currentDir = nextDir; 
+            currentDir = { ...nextDir }; 
         } else {
             let isReversalX = (nextDir.x !== 0 && nextDir.x === -currentDir.x);
             let isReversalY = (nextDir.y !== 0 && nextDir.y === -currentDir.y);
-            if (!isReversalX && !isReversalY) currentDir = nextDir;
+            if (!isReversalX && !isReversalY) currentDir = { ...nextDir };
         }
     }
 
@@ -762,6 +780,7 @@ function showGameOver() {
     popup.style.zIndex = "99999"; // Make sure it's on top of everything
     currentDir = {x:0, y:0};
     nextDir = {x:0, y:0};
+    dirStack = [];
 }
 
 // Helper: Create a map of empty tiles that enemies can reach ("safe" empty tiles)
