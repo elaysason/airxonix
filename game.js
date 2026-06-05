@@ -580,6 +580,10 @@ function processMovement() {
     if (nextTileType === 2) {
         if (!activePowerups.shield) {
             showGameOver();
+        } else {
+            // Shielded: don't die to our own trail, but never cross it.
+            // Stop cleanly so the player can steer away instead of soft-locking.
+            currentDir = {x:0, y:0};
         }
         return;
     }
@@ -763,6 +767,7 @@ function triggerFill() {
 
 // 1. CALL THIS WHEN YOU DIE
 function showGameOver() {
+    if (isGameOver) return; // Guard against repeat calls within the same frame
     isGameOver = true; // <--- LOCK KEYS
     mainScene.physics.pause();
     player.setTint(0xff4500);
