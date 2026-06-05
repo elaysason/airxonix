@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Hayadata AirXonix</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="phaser.min.js"></script>
+</head>
+<body>
+
+    <!-- Start Screen -->
+    <div id="start-screen" style="display:flex; position:absolute; top:0; left:0; width:100%; height:100%; background:linear-gradient(135deg, #0a0a1a 0%, #1a1a3a 100%); z-index:10000; flex-direction:column; justify-content:center; align-items:center; font-family:Arial, sans-serif;">
+        <h1 style="color:#00f3ff; font-size:48px; text-shadow: 0 0 20px #00f3ff, 0 0 40px #00f3ff; margin-bottom:10px;">AIR XONIX</h1>
+        <p style="color:#ff00ff; font-size:18px; margin-bottom:40px;">Capture 80% of the field to win!</p>
+        <div style="color:#aaa; font-size:14px; margin-bottom:30px; text-align:center;">
+            <p>🎮 Arrow Keys or WASD to move</p>
+            <p>⏸️ ESC or P to pause</p>
+            <p>🛡️ Collect powerups for special abilities</p>
+        </div>
+        <div style="color:#888; font-size:12px; margin-bottom:20px; text-align:center; line-height:1.8;">
+            <p style="color:#ffaa00;">● Orange - Standard enemy</p>
+            <p style="color:#ff3333;">● Red - Destroyer (removes land)</p>
+            <p style="color:#9900ff;">● Purple - Homing (follows you)</p>
+            <p style="color:#00ffff;">◆ Cyan - Fast (1.8x speed)</p>
+            <p style="color:#00ff66;">■ Green - Bouncer (erratic)</p>
+        </div>
+        <button id="start-btn" style="padding:15px 50px; font-size:20px; cursor:pointer; background:linear-gradient(180deg, #00f3ff, #0088aa); border:none; border-radius:10px; color:#000; font-weight:bold; box-shadow: 0 0 20px #00f3ff;">START GAME</button>
+    </div>
+
+    <!-- Pause Screen -->
+    <div id="pause-screen" style="display:none; position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:9998; flex-direction:column; justify-content:center; align-items:center; font-family:Arial, sans-serif;">
+        <h1 style="color:#00f3ff; font-size:42px; text-shadow: 0 0 20px #00f3ff;">PAUSED</h1>
+        <p style="color:#888; font-size:16px; margin-bottom:30px;">Press ESC or P to resume</p>
+        <button onclick="resumeGame()" style="padding:12px 40px; font-size:18px; cursor:pointer; background:#00f3ff; border:none; border-radius:8px; color:#000; font-weight:bold; margin:5px;">Resume</button>
+        <button onclick="restartGame()" style="padding:12px 40px; font-size:18px; cursor:pointer; background:#ff4444; border:none; border-radius:8px; color:#fff; font-weight:bold; margin:5px;">Restart</button>
+    </div>
+
+    <div id="game-over-screen" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:linear-gradient(180deg, #440000, #220000); border: 4px solid #ff4444; color:white; padding:30px; text-align:center; font-family:Arial, sans-serif; z-index:9999; border-radius:10px; box-shadow: 0 0 30px rgba(255,0,0,0.5);">
+        <h1 style="color:#ff4444; text-shadow: 0 0 10px #ff0000;">GAME OVER</h1>
+        <p style="color:#aaa;">Final Score: <span id="final-score" style="color:#00f3ff; font-weight:bold;">0</span></p>
+        <button onclick="restartGame()" style="padding:12px 30px; font-size:16px; cursor:pointer; background:#ff4444; border:none; border-radius:8px; color:#fff; font-weight:bold; margin-top:15px;">Try Again</button>
+    </div>
+
+    <div id="level-up-screen" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:linear-gradient(180deg, #004400, #002200); border: 4px solid #00ff00; color:white; padding:30px; text-align:center; font-family:Arial, sans-serif; z-index:9999; border-radius:10px; box-shadow: 0 0 30px rgba(0,255,0,0.5);">
+        <h1 style="color:#00ff00; text-shadow: 0 0 10px #00ff00;">LEVEL COMPLETE!</h1>
+        <p style="color:#aaa;">Score: <span id="level-score" style="color:#00f3ff; font-weight:bold;">0</span></p>
+        <button onclick="nextLevel()" style="padding:12px 30px; font-size:16px; cursor:pointer; background:#00ff00; border:none; border-radius:8px; color:#000; font-weight:bold; margin-top:15px;">Next Level</button>
+    </div>
+
+    <!-- Improved HUD -->
+    <div id="ui-layer" style="position:absolute; top:10px; left:10px; right:10px; display:flex; justify-content:center; gap:20px; pointer-events:none; z-index:100; font-family:Arial, sans-serif;">
+        <div style="background:rgba(0,0,0,0.7); padding:10px 15px; border-radius:8px; border-left:3px solid #00f3ff; min-width:80px; text-align:center;">
+            <div style="color:#00f3ff; font-size:12px; text-transform:uppercase;">Score</div>
+            <div id="score-text" style="color:#fff; font-size:24px; font-weight:bold;">0</div>
+        </div>
+        <div style="background:rgba(0,0,0,0.7); padding:10px 15px; border-radius:8px; border-left:3px solid #ff00ff; min-width:60px; text-align:center;">
+            <div style="color:#ff00ff; font-size:12px; text-transform:uppercase;">Level</div>
+            <div id="level-text" style="color:#fff; font-size:24px; font-weight:bold;">1</div>
+        </div>
+        <div style="background:rgba(0,0,0,0.7); padding:10px 15px; border-radius:8px; border-left:3px solid #00ff00; min-width:100px; text-align:center;">
+            <div style="color:#00ff00; font-size:12px; text-transform:uppercase;">Captured</div>
+            <div><span id="percent-text" style="color:#fff; font-size:24px; font-weight:bold;">0</span><span style="color:#888; font-size:16px;">% / 80%</span></div>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+
+</body>
+</html>
