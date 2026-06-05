@@ -810,7 +810,15 @@ function restartGame() {
     // Hide all popups
     domElements.gameOverScreen.style.display = 'none';
     domElements.pauseScreen.style.display = 'none';
+    if (domElements.levelUpScreen) {
+        domElements.levelUpScreen.style.display = 'none';
+    }
     isPaused = false;
+    isGameOver = false;
+
+    // Restarting from a game-over or win screen should start a fresh run.
+    level = 1;
+    score = 0;
     
     // Restart the Phaser Scene
     mainScene.scene.restart();
