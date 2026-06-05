@@ -35,6 +35,7 @@ let currentDir = {x:0, y:0}; // Where we are moving NOW
 let nextDir = {x:0, y:0};    // Where we WANT to move (Input Buffer)
 let dirStack = [];           // Currently-held directions, in press order (last = most recent)
 let PLAYER_SPEED = 4;       // Speed: 4 = Normal, 8 = Fast
+const BASE_PLAYER_SPEED = 4; // Default speed to restore to when Speed powerup ends
 let isMoving = false;     
 let targetPos = {x: 0, y: 0};
 let enemyGroup;
@@ -243,7 +244,10 @@ function create() {
     currentDir = {x:0, y:0};
     nextDir = {x:0, y:0};
     dirStack = [];
-    PLAYER_SPEED = 4;
+    PLAYER_SPEED = BASE_PLAYER_SPEED;
+    // Powerups don't carry across levels/restarts. Scene shutdown cancels the
+    // expiry timers, so without this the shield flag could stick = permanent invincibility.
+    activePowerups = { shield: false, speed: false };
     // Only reset score if it's Level 1
     if (level === 1) score = 0;
     
@@ -1120,6 +1124,43 @@ function spawnPowerup() {
         });
     }
 }
+// Tear down all Shield powerup state/visuals. Idempotent + safe to call on re-pickup.
+function clearShieldPowerup() {
+    activePowerups.shield = false;
+    if (player) { player.setAlpha(1); player.clearTint(); }
+    if (activePowerups.shieldTimer) { activePowerups.shieldTimer.remove(false); delete activePowerups.shieldTimer; }
+    if (activePowerups.shieldTween) { activePowerups.shieldTween.stop(); delete activePowerups.shieldTween; }
+    if (activePowerups.shieldFollow) { mainScene.events.off('update', activePowerups.shieldFollow); delete activePowerups.shieldFollow; }
+    if (activePowerups.shieldAura) { activePowerups.shieldAura.destroy(); delete activePowerups.shieldAura; }
+    if (activePowerups.shieldUpdateBar) { mainScene.events.off('update', activePowerups.shieldUpdateBar); delete activePowerups.shieldUpdateBar; }
+    if (activePowerups.shieldTimerTween) { activePowerups.shieldTimerTween.stop(); delete activePowerups.shieldTimerTween; }
+    if (activePowerups.shieldCornerTweens) { activePowerups.shieldCornerTweens.forEach(tw => tw.stop()); delete activePowerups.shieldCornerTweens; }
+    if (powerupTimerText) powerupTimerText.setScale(1);
+    mainScene.tweens.add({ targets: screenTintShield, alpha: 0, duration: 200 });
+    cornerGlows.forEach(c => mainScene.tweens.add({ targets: c, alpha: 0, duration: 200 }));
+    if (powerupHudBg) powerupHudBg.setVisible(false);
+    if (powerupHudBar) powerupHudBar.setVisible(false);
+    if (powerupTimerText) powerupTimerText.setVisible(false);
+}
+
+// Tear down all Speed powerup state/visuals. Idempotent + safe to call on re-pickup.
+function clearSpeedPowerup() {
+    activePowerups.speed = false;
+    PLAYER_SPEED = BASE_PLAYER_SPEED;
+    if (activePowerups.speedTimer) { activePowerups.speedTimer.remove(false); delete activePowerups.speedTimer; }
+    if (activePowerups.speedTween) { activePowerups.speedTween.stop(); delete activePowerups.speedTween; }
+    if (activePowerups.speedFollow) { mainScene.events.off('update', activePowerups.speedFollow); delete activePowerups.speedFollow; }
+    if (activePowerups.speedAura) { activePowerups.speedAura.destroy(); delete activePowerups.speedAura; }
+    if (activePowerups.speedUpdateBar) { mainScene.events.off('update', activePowerups.speedUpdateBar); delete activePowerups.speedUpdateBar; }
+    if (activePowerups.speedTimerTween) { activePowerups.speedTimerTween.stop(); delete activePowerups.speedTimerTween; }
+    if (activePowerups.speedCornerTweens) { activePowerups.speedCornerTweens.forEach(tw => tw.stop()); delete activePowerups.speedCornerTweens; }
+    if (powerupTimerText) powerupTimerText.setScale(1);
+    mainScene.tweens.add({ targets: screenTintSpeed, alpha: 0, duration: 200 });
+    cornerGlows.forEach(c => mainScene.tweens.add({ targets: c, alpha: 0, duration: 200 }));
+    if (powerupHudBg) powerupHudBg.setVisible(false);
+    if (powerupHudBar) powerupHudBar.setVisible(false);
+    if (powerupTimerText) powerupTimerText.setVisible(false);
+}
 function applyPowerup(key) {
     let msg = mainScene.add.text(player.x, player.y - 20, key.split('_')[1].toUpperCase(), {
         fontSize: '16px',
@@ -1136,6 +1177,8 @@ function applyPowerup(key) {
         onComplete: () => msg.destroy()
     });
     if (key === 'powerup_shield') {
+        // Refresh if already active: tear down prior instance so timers/auras don't stack/leak
+        if (activePowerups.shield) clearShieldPowerup();
         activePowerups.shield = true;
         player.setAlpha(0.5); // Visual feedback
         player.setTint(0x00ff00);
@@ -1211,28 +1254,14 @@ function applyPowerup(key) {
         };
         mainScene.events.on('update', activePowerups.shieldUpdateBar);
 
-        mainScene.time.delayedCall(5000, () => {
-            activePowerups.shield = false;
-            player.setAlpha(1);
-            player.clearTint();
-            if (activePowerups.shieldTween) { activePowerups.shieldTween.stop(); delete activePowerups.shieldTween; }
-            if (activePowerups.shieldFollow) { mainScene.events.off('update', activePowerups.shieldFollow); delete activePowerups.shieldFollow; }
-            if (activePowerups.shieldAura) { activePowerups.shieldAura.destroy(); delete activePowerups.shieldAura; }
-            if (activePowerups.shieldUpdateBar) { mainScene.events.off('update', activePowerups.shieldUpdateBar); delete activePowerups.shieldUpdateBar; }
-            if (activePowerups.shieldTimerTween) { activePowerups.shieldTimerTween.stop(); delete activePowerups.shieldTimerTween; }
-            if (activePowerups.shieldCornerTweens) { activePowerups.shieldCornerTweens.forEach(tw => tw.stop()); delete activePowerups.shieldCornerTweens; }
-            if (powerupTimerText) powerupTimerText.setScale(1);
-            mainScene.tweens.add({ targets: screenTintShield, alpha: 0, duration: 200 });
-            cornerGlows.forEach(c => mainScene.tweens.add({ targets: c, alpha: 0, duration: 200 }));
-            if (powerupHudBg) powerupHudBg.setVisible(false);
-            if (powerupHudBar) powerupHudBar.setVisible(false);
-            if (powerupTimerText) powerupTimerText.setVisible(false);
-        });
+        activePowerups.shieldTimer = mainScene.time.delayedCall(5000, clearShieldPowerup);
     } 
     else if (key === 'powerup_speed') {
-        // Double PLAYER_SPEED
-        const originalSpeed = PLAYER_SPEED;
-        PLAYER_SPEED = 8; 
+        // Refresh if already active: tear down prior instance so timers/auras don't stack/leak
+        if (activePowerups.speed) clearSpeedPowerup();
+        activePowerups.speed = true;
+        // Double PLAYER_SPEED (always relative to the base, never a previously-boosted value)
+        PLAYER_SPEED = BASE_PLAYER_SPEED * 2; 
 
         // Add a purple aura image that follows the player
         let speedAura = mainScene.add.image(player.x + 10, player.y + 10, 'glow_speed');
@@ -1305,21 +1334,7 @@ function applyPowerup(key) {
         };
         mainScene.events.on('update', activePowerups.speedUpdateBar);
 
-        mainScene.time.delayedCall(7000, () => {
-            PLAYER_SPEED = originalSpeed;
-            if (activePowerups.speedTween) { activePowerups.speedTween.stop(); delete activePowerups.speedTween; }
-            if (activePowerups.speedFollow) { mainScene.events.off('update', activePowerups.speedFollow); delete activePowerups.speedFollow; }
-            if (activePowerups.speedAura) { activePowerups.speedAura.destroy(); delete activePowerups.speedAura; }
-            if (activePowerups.speedUpdateBar) { mainScene.events.off('update', activePowerups.speedUpdateBar); delete activePowerups.speedUpdateBar; }
-            if (activePowerups.speedTimerTween) { activePowerups.speedTimerTween.stop(); delete activePowerups.speedTimerTween; }
-            if (activePowerups.speedCornerTweens) { activePowerups.speedCornerTweens.forEach(tw => tw.stop()); delete activePowerups.speedCornerTweens; }
-            if (powerupTimerText) powerupTimerText.setScale(1);
-            mainScene.tweens.add({ targets: screenTintSpeed, alpha: 0, duration: 200 });
-            cornerGlows.forEach(c => mainScene.tweens.add({ targets: c, alpha: 0, duration: 200 }));
-            if (powerupHudBg) powerupHudBg.setVisible(false);
-            if (powerupHudBar) powerupHudBar.setVisible(false);
-            if (powerupTimerText) powerupTimerText.setVisible(false);
-        });
+        activePowerups.speedTimer = mainScene.time.delayedCall(7000, clearSpeedPowerup);
     }
 }
 
