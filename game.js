@@ -59,6 +59,7 @@ const domElements = {
     startScreen: null,
     pauseScreen: null,
     finalScore: null,
+    deathReason: null,
     levelScore: null
 };
 
@@ -228,6 +229,7 @@ function create() {
         domElements.startScreen = document.getElementById('start-screen');
         domElements.pauseScreen = document.getElementById('pause-screen');
         domElements.finalScore = document.getElementById('final-score');
+        domElements.deathReason = document.getElementById('death-reason');
         domElements.levelScore = document.getElementById('level-score');
     }
     
@@ -498,7 +500,7 @@ function update(time, delta) {
         // Trail Collision
         if (grid[gx] && grid[gx][gy] === 2) {
             if (!activePowerups.shield) {
-                showGameOver();
+                showGameOver('An enemy hit your trail. Reach land before they touch it.');
             }
         }
         
@@ -508,7 +510,7 @@ function update(time, delta) {
         let playerCY = player.y + TILE_SIZE / 2;
         let dist = Phaser.Math.Distance.Between(ball.x, ball.y, playerCX, playerCY);
         if (dist < 15 && !activePowerups.shield) {
-            showGameOver();
+            showGameOver('An enemy touched you. Stay on the border or keep your distance.');
         }
         
         // Special enemy behaviors
@@ -583,7 +585,7 @@ function processMovement() {
     // Crash Check
     if (nextTileType === 2) {
         if (!activePowerups.shield) {
-            showGameOver();
+            showGameOver('You crossed your own trail. Close the loop without doubling back.');
         } else {
             // Shielded: don't die to our own trail, but never cross it.
             // Stop cleanly so the player can steer away instead of soft-locking.
@@ -770,7 +772,7 @@ function triggerFill() {
 
 
 // 1. CALL THIS WHEN YOU DIE
-function showGameOver() {
+function showGameOver(reason = 'You were caught!') {
     if (isGameOver) return; // Guard against repeat calls within the same frame
     isGameOver = true; // <--- LOCK KEYS
     mainScene.physics.pause();
@@ -779,6 +781,9 @@ function showGameOver() {
     // Update final score
     if (domElements.finalScore) {
         domElements.finalScore.innerText = score;
+    }
+    if (domElements.deathReason) {
+        domElements.deathReason.innerText = reason;
     }
     
     // Get the element
