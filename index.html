@@ -49,18 +49,36 @@
     </div>
 
     <!-- Improved HUD -->
-    <div id="ui-layer" style="position:absolute; top:10px; left:10px; right:10px; display:flex; justify-content:center; gap:20px; pointer-events:none; z-index:100; font-family:Arial, sans-serif;">
-        <div style="background:rgba(0,0,0,0.7); padding:10px 15px; border-radius:8px; border-left:3px solid #00f3ff; min-width:80px; text-align:center;">
-            <div style="color:#00f3ff; font-size:12px; text-transform:uppercase;">Score</div>
-            <div id="score-text" style="color:#fff; font-size:24px; font-weight:bold;">0</div>
-        </div>
-        <div style="background:rgba(0,0,0,0.7); padding:10px 15px; border-radius:8px; border-left:3px solid #ff00ff; min-width:60px; text-align:center;">
-            <div style="color:#ff00ff; font-size:12px; text-transform:uppercase;">Level</div>
-            <div id="level-text" style="color:#fff; font-size:24px; font-weight:bold;">1</div>
-        </div>
-        <div style="background:rgba(0,0,0,0.7); padding:10px 15px; border-radius:8px; border-left:3px solid #00ff00; min-width:100px; text-align:center;">
-            <div style="color:#00ff00; font-size:12px; text-transform:uppercase;">Captured</div>
-            <div><span id="percent-text" style="color:#fff; font-size:24px; font-weight:bold;">0</span><span style="color:#888; font-size:16px;">% / 80%</span></div>
+    <div id="ui-layer" style="position:absolute; top:14px; left:0; right:0; display:flex; justify-content:center; pointer-events:none; z-index:100; font-family:Arial, sans-serif;">
+        <div style="display:flex; align-items:center; gap:26px; background:rgba(10,10,20,0.78); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px 22px; box-shadow:0 4px 24px rgba(0,0,0,0.5);">
+
+            <!-- Score -->
+            <div style="text-align:center;">
+                <div style="color:#00f3ff; font-size:10px; letter-spacing:2px; text-transform:uppercase; margin-bottom:4px;">Score</div>
+                <div id="score-text" style="color:#fff; font-size:26px; line-height:1; font-weight:800;">0</div>
+            </div>
+
+            <div style="width:1px; align-self:stretch; background:rgba(255,255,255,0.1);"></div>
+
+            <!-- Level -->
+            <div style="text-align:center;">
+                <div style="color:#ff00ff; font-size:10px; letter-spacing:2px; text-transform:uppercase; margin-bottom:4px;">Level</div>
+                <div id="level-text" style="color:#fff; font-size:26px; line-height:1; font-weight:800;">1</div>
+            </div>
+
+            <div style="width:1px; align-self:stretch; background:rgba(255,255,255,0.1);"></div>
+
+            <!-- Objective -->
+            <div style="width:260px;">
+                <div style="color:#00ff66; font-size:10px; letter-spacing:2px; text-transform:uppercase; margin-bottom:4px; text-align:center;">Objective</div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <div style="flex:1; height:9px; background:rgba(255,255,255,0.08); border-radius:999px; overflow:hidden;">
+                        <div id="objective-progress" style="width:0%; height:100%; background:linear-gradient(90deg, #00ff66, #00f3ff); border-radius:999px; transition:width 0.2s ease;"></div>
+                    </div>
+                    <span style="white-space:nowrap;"><span id="percent-text" style="color:#fff; font-size:16px; font-weight:800;">0</span><span style="color:#7f8a8a; font-size:12px;"> / 80%</span></span>
+                </div>
+            </div>
+
         </div>
     </div>
 

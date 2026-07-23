@@ -53,6 +53,7 @@ let trailGroup;
 const domElements = {
     scoreText: null,
     percentText: null,
+    objectiveProgress: null,
     levelText: null,
     gameOverScreen: null,
     levelUpScreen: null,
@@ -223,6 +224,7 @@ function create() {
     if (!domElements.scoreText) {
         domElements.scoreText = document.getElementById('score-text');
         domElements.percentText = document.getElementById('percent-text');
+        domElements.objectiveProgress = document.getElementById('objective-progress');
         domElements.levelText = document.getElementById('level-text');
         domElements.gameOverScreen = document.getElementById('game-over-screen');
         domElements.levelUpScreen = document.getElementById('level-up-screen');
@@ -256,6 +258,9 @@ function create() {
     // Reset UI
     domElements.scoreText.innerText = score;
     domElements.percentText.innerText = "0";
+    if (domElements.objectiveProgress) {
+        domElements.objectiveProgress.style.width = '0%';
+    }
     if(domElements.levelText) {
         domElements.levelText.innerText = level;
     }
@@ -1039,6 +1044,9 @@ function updateGamePercentage() {
     
     // Update the UI
     domElements.percentText.innerText = percent;
+    if (domElements.objectiveProgress) {
+        domElements.objectiveProgress.style.width = `${Math.min(percent, 80) / 80 * 100}%`;
+    }
     
     return percent; // Return it so other functions can use it
 }
