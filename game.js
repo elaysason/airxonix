@@ -37,6 +37,7 @@ let dirStack = [];           // Currently-held directions, in press order (last 
 let PLAYER_SPEED = 4;       // Speed: 4 = Normal, 8 = Fast
 const BASE_PLAYER_SPEED = 4; // Default speed to restore to when Speed powerup ends
 let ballSpeed = 150;        // Current enemy speed; (re)set per level in create()
+let announcedEnemyTypes = new Set(); // Enemy types already introduced this level (once-per-type callout)
 let isMoving = false;     
 let targetPos = {x: 0, y: 0};
 let enemyGroup;
@@ -300,6 +301,8 @@ function create() {
     // Powerups don't carry across levels/restarts. Scene shutdown cancels the
     // expiry timers, so without this the shield flag could stick = permanent invincibility.
     activePowerups = { shield: false, speed: false };
+    // Re-teach enemy types each level: clear the "already introduced" set.
+    announcedEnemyTypes = new Set();
     // Only reset score if it's Level 1
     if (level === 1) score = 0;
     
@@ -618,7 +621,15 @@ function processMovement() {
         } else {
             let isReversalX = (nextDir.x !== 0 && nextDir.x === -currentDir.x);
             let isReversalY = (nextDir.y !== 0 && nextDir.y === -currentDir.y);
-            if (!isReversalX && !isReversalY) currentDir = { ...nextDir };
+            if (isReversalX || isReversalY) {
+                // Off-land, pressing the exact reverse direction stops the player
+                // (pressing it must do something visible; and reversing would head
+                // back over the trail we just drew). Walking into the trail is also
+                // caught by the crash check below, so this stays safe either way.
+                currentDir = { x: 0, y: 0 };
+                return;
+            }
+            currentDir = { ...nextDir };
         }
     }
 
@@ -636,15 +647,11 @@ function processMovement() {
     // --- LOGIC & VISUALS ---
     let nextTileType = grid[nextX][nextY];
 
-    // Crash Check
+    // Crash Check: walking into our OWN trail is treated like a wall — stop
+    // cleanly instead of dying. (Enemies hitting the trail still cause game
+    // over; that check lives in the enemy loop.) This makes reversals safe.
     if (nextTileType === 2) {
-        if (!activePowerups.shield) {
-            showGameOver('You crossed your own trail. Close the loop without doubling back.');
-        } else {
-            // Shielded: don't die to our own trail, but never cross it.
-            // Stop cleanly so the player can steer away instead of soft-locking.
-            currentDir = {x:0, y:0};
-        }
+        currentDir = { x: 0, y: 0 };
         return;
     }
     
@@ -693,13 +700,26 @@ function triggerFill() {
 
     let stack = [];
 
-    // 3. SEED FROM ENEMIES: Mark areas enemies can reach as "Safe"
+    // 3. SEED FROM ENEMIES: Mark areas enemies can reach as "Safe".
+    // An enemy is a circle spanning several tiles; at capture time its center
+    // tile may momentarily read as land/boundary. If we only seeded from the
+    // center tile, such an enemy would be skipped and wrongly captured. So seed
+    // from every empty tile its body overlaps (bounding box of its radius).
     enemyGroup.children.iterate((enemy) => {
-        let ex = Math.floor(enemy.x / TILE_SIZE);
-        let ey = Math.floor(enemy.y / TILE_SIZE);
-        if (grid[ex][ey] === 0) {
-            stack.push({ x: ex, y: ey });
-            safeMap[ex][ey] = true;
+        if (!enemy || !enemy.active) return;
+        const r = (enemy.body && enemy.body.radius) ? enemy.body.radius : 10;
+        const minX = Math.floor((enemy.x - r) / TILE_SIZE);
+        const maxX = Math.floor((enemy.x + r) / TILE_SIZE);
+        const minY = Math.floor((enemy.y - r) / TILE_SIZE);
+        const maxY = Math.floor((enemy.y + r) / TILE_SIZE);
+        for (let ex = minX; ex <= maxX; ex++) {
+            for (let ey = minY; ey <= maxY; ey++) {
+                if (ex >= 0 && ex < COLS && ey >= 0 && ey < ROWS &&
+                    grid[ex][ey] === 0 && !safeMap[ex][ey]) {
+                    stack.push({ x: ex, y: ey });
+                    safeMap[ex][ey] = true;
+                }
+            }
         }
     });
 
@@ -944,14 +964,22 @@ function generateSafeMap() {
 
     let stack = [];
 
-    // Seed from enemies' current positions
+    // Seed from enemies' bodies (every empty tile their circle overlaps), so a
+    // boundary-hugging enemy still counts. Mirrors the seeding in triggerFill.
     enemyGroup.children.iterate((enemy) => {
-        let ex = Math.floor(enemy.x / TILE_SIZE);
-        let ey = Math.floor(enemy.y / TILE_SIZE);
-        if (ex >= 0 && ex < COLS && ey >= 0 && ey < ROWS) {
-            if (grid[ex][ey] === 0 && !safeMap[ex][ey]) {
-                safeMap[ex][ey] = true;
-                stack.push({ x: ex, y: ey });
+        if (!enemy || !enemy.active) return;
+        const r = (enemy.body && enemy.body.radius) ? enemy.body.radius : 10;
+        const minX = Math.floor((enemy.x - r) / TILE_SIZE);
+        const maxX = Math.floor((enemy.x + r) / TILE_SIZE);
+        const minY = Math.floor((enemy.y - r) / TILE_SIZE);
+        const maxY = Math.floor((enemy.y + r) / TILE_SIZE);
+        for (let ex = minX; ex <= maxX; ex++) {
+            for (let ey = minY; ey <= maxY; ey++) {
+                if (ex >= 0 && ex < COLS && ey >= 0 && ey < ROWS &&
+                    grid[ex][ey] === 0 && !safeMap[ex][ey]) {
+                    safeMap[ex][ey] = true;
+                    stack.push({ x: ex, y: ey });
+                }
             }
         }
     });
@@ -1159,6 +1187,54 @@ function spawnEnemy(enemyType = 'normal') {
     let dirX = Math.random() > 0.5 ? speed : -speed;
     let dirY = Math.random() > 0.5 ? speed : -speed;
     ball.setVelocity(dirX, dirY);
+
+    // Introduce each enemy type the first time it appears this level.
+    announceEnemyType(enemyType, rx, ry);
+}
+
+// Enemy type introductions: label + one-line description + color.
+const ENEMY_INFO = {
+    normal:    { label: 'ENEMY',     desc: 'Standard',        color: '#ffaa00' },
+    fast:      { label: 'FAST',      desc: '1.8x speed',      color: '#00ffff' },
+    destroyer: { label: 'DESTROYER', desc: 'Removes land',    color: '#ff3333' },
+    homing:    { label: 'HOMING',    desc: 'Follows you',     color: '#9900ff' },
+    bouncer:   { label: 'BOUNCER',   desc: 'Erratic',         color: '#00ff66' }
+};
+
+// Show a brief callout the first time a given enemy type spawns in a level.
+function announceEnemyType(enemyType, x, y) {
+    if (!mainScene) return;
+    if (announcedEnemyTypes.has(enemyType)) return;
+    announcedEnemyTypes.add(enemyType);
+
+    const info = ENEMY_INFO[enemyType] || ENEMY_INFO.normal;
+
+    // Keep the label on-screen even when the enemy spawns near an edge.
+    let tx = Phaser.Math.Clamp(x, 70, config.width - 70);
+    let ty = Phaser.Math.Clamp(y - 24, 20, config.height - 20);
+
+    let msg = mainScene.add.text(tx, ty, `${info.label} — ${info.desc}`, {
+        fontSize: '14px',
+        fontFamily: 'Arial',
+        fontStyle: 'bold',
+        color: info.color,
+        stroke: '#000000',
+        strokeThickness: 4
+    });
+    msg.setOrigin(0.5);
+    msg.setDepth(302);
+    msg.setAlpha(0);
+
+    mainScene.tweens.add({
+        targets: msg,
+        alpha: 1,
+        y: ty - 12,
+        duration: 300,
+        ease: 'Sine.easeOut',
+        hold: 1400,
+        yoyo: true,
+        onComplete: () => msg.destroy()
+    });
 }
 
 function updateGamePercentage() {
