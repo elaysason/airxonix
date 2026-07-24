@@ -36,6 +36,7 @@ let nextDir = {x:0, y:0};    // Where we WANT to move (Input Buffer)
 let dirStack = [];           // Currently-held directions, in press order (last = most recent)
 let PLAYER_SPEED = 4;       // Speed: 4 = Normal, 8 = Fast
 const BASE_PLAYER_SPEED = 4; // Default speed to restore to when Speed powerup ends
+let ballSpeed = 150;        // Current enemy speed; (re)set per level in create()
 let isMoving = false;     
 let targetPos = {x: 0, y: 0};
 let enemyGroup;
