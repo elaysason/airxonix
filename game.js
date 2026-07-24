@@ -61,8 +61,53 @@ const domElements = {
     pauseScreen: null,
     finalScore: null,
     deathReason: null,
+    bestScoreLine: null,
+    startBest: null,
     levelScore: null
 };
+
+// Persistent high score (best score + highest level reached)
+const HIGH_SCORE_KEY = 'airxonix_highscore';
+let highScore = { score: 0, level: 1 };
+
+function loadHighScore() {
+    try {
+        const raw = localStorage.getItem(HIGH_SCORE_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            highScore = {
+                score: Number(parsed.score) || 0,
+                level: Number(parsed.level) || 1
+            };
+        }
+    } catch (e) {
+        highScore = { score: 0, level: 1 };
+    }
+    return highScore;
+}
+
+function saveHighScore() {
+    try {
+        localStorage.setItem(HIGH_SCORE_KEY, JSON.stringify(highScore));
+    } catch (e) {
+        // Storage unavailable (private mode / disabled) - fail silently.
+    }
+}
+
+// Update best score/level from the current run. Returns true if a new record was set.
+function recordHighScore(currentScore, currentLevel) {
+    let improved = false;
+    if (currentScore > highScore.score) { highScore.score = currentScore; improved = true; }
+    if (currentLevel > highScore.level) { highScore.level = currentLevel; improved = true; }
+    if (improved) saveHighScore();
+    return improved;
+}
+
+function renderStartBest() {
+    if (domElements.startBest) {
+        domElements.startBest.innerText = `Best: ${highScore.score} · Level ${highScore.level}`;
+    }
+}
 
 // Game state
 let isPaused = false;
@@ -232,6 +277,8 @@ function create() {
         domElements.pauseScreen = document.getElementById('pause-screen');
         domElements.finalScore = document.getElementById('final-score');
         domElements.deathReason = document.getElementById('death-reason');
+        domElements.bestScoreLine = document.getElementById('best-score-line');
+        domElements.startBest = document.getElementById('start-best');
         domElements.levelScore = document.getElementById('level-score');
     }
     
@@ -789,6 +836,15 @@ function showGameOver(reason = 'You were caught!') {
     }
     if (domElements.deathReason) {
         domElements.deathReason.innerText = reason;
+    }
+
+    // Persist and display best score/level
+    const isNewRecord = recordHighScore(score, level);
+    renderStartBest();
+    if (domElements.bestScoreLine) {
+        domElements.bestScoreLine.innerText = isNewRecord
+            ? `New Best! ${highScore.score} · Level ${highScore.level}`
+            : `Best: ${highScore.score} · Level ${highScore.level}`;
     }
     
     // Get the element
@@ -1353,6 +1409,9 @@ function applyPowerup(key) {
 
 // Initialize start button when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
+    loadHighScore();
+    domElements.startBest = document.getElementById('start-best');
+    renderStartBest();
     const startBtn = document.getElementById('start-btn');
     if (startBtn) {
         startBtn.addEventListener('click', startGame);
