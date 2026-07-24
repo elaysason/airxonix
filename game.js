@@ -307,6 +307,7 @@ function create() {
     domElements.percentText.innerText = "0";
     if (domElements.objectiveProgress) {
         domElements.objectiveProgress.style.width = '0%';
+        domElements.objectiveProgress.classList.remove('on-fire');
     }
     if(domElements.levelText) {
         domElements.levelText.innerText = level;
@@ -737,6 +738,13 @@ function triggerFill() {
     if (filledCount > 20) {
         mainScene.cameras.main.flash(500); // White flash for 0.5s
         mainScene.cameras.main.shake(100, 0.01); // Tiny rumble
+        igniteObjectiveBar(); // Objective bar briefly turns to fire
+    }
+
+    // Visual capture juice: floating score gain near the player, plus a
+    // "BIG CAPTURE!" callout for large fills. No audio (air-gapped target).
+    if (filledCount > 0) {
+        showCaptureJuice(filledCount * 10, filledCount > 20);
     }
     let percent = updateGamePercentage();
     domElements.scoreText.innerText = score;
@@ -822,6 +830,71 @@ function triggerFill() {
     // You might need to restart the scene to clear the red squares cleanly, 
     // or just leave them covered by blue blocks.
 
+// Briefly turn the objective bar into fire (used on a BIG CAPTURE), then revert.
+function igniteObjectiveBar() {
+    const bar = domElements.objectiveProgress;
+    if (!bar) return;
+    bar.classList.add('on-fire');
+    if (igniteObjectiveBar._timer) clearTimeout(igniteObjectiveBar._timer);
+    igniteObjectiveBar._timer = setTimeout(() => {
+        bar.classList.remove('on-fire');
+        igniteObjectiveBar._timer = null;
+    }, 1200);
+}
+
+// Visual-only feedback for a successful capture. Shows a floating "+points"
+// near the player and, for large captures, a "BIG CAPTURE!" callout.
+function showCaptureJuice(points, isBig) {
+    if (!mainScene || !player) return;
+
+    let px = player.x + TILE_SIZE / 2;
+    let py = player.y;
+
+    let gain = mainScene.add.text(px, py, `+${points}`, {
+        fontSize: '18px',
+        fontFamily: 'Arial',
+        fontStyle: 'bold',
+        color: '#00ff66',
+        stroke: '#003311',
+        strokeThickness: 3
+    });
+    gain.setOrigin(0.5, 1);
+    gain.setDepth(300);
+    mainScene.tweens.add({
+        targets: gain,
+        y: py - 40,
+        alpha: 0,
+        duration: 900,
+        ease: 'Sine.easeOut',
+        onComplete: () => gain.destroy()
+    });
+
+    if (isBig) {
+        let big = mainScene.add.text(config.width / 2, config.height / 2, 'BIG CAPTURE!', {
+            fontSize: '40px',
+            fontFamily: 'Arial',
+            fontStyle: 'bold',
+            color: '#ffffff',
+            stroke: '#00aa44',
+            strokeThickness: 6
+        });
+        big.setOrigin(0.5);
+        big.setDepth(301);
+        big.setScrollFactor(0);
+        big.setScale(0.6);
+        big.setAlpha(0);
+        mainScene.tweens.add({
+            targets: big,
+            scale: 1,
+            alpha: 1,
+            duration: 250,
+            ease: 'Back.easeOut',
+            yoyo: true,
+            hold: 500,
+            onComplete: () => big.destroy()
+        });
+    }
+}
 
 // 1. CALL THIS WHEN YOU DIE
 function showGameOver(reason = 'You were caught!') {

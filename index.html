@@ -4,6 +4,22 @@
     <meta charset="UTF-8">
     <title>Hayadata AirXonix</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        /* Objective bar: calm green normally; ignites into fire on a BIG CAPTURE */
+        #objective-progress {
+            background: linear-gradient(90deg, #00ff66, #00f3ff);
+        }
+        #objective-progress.on-fire {
+            background: linear-gradient(90deg, #ff6600, #ffcc00, #ff3300, #ffaa00);
+            background-size: 200% 100%;
+            animation: bar-fire 0.5s linear infinite;
+            box-shadow: 0 0 22px #ffdd33, 0 0 10px #fff inset;
+        }
+        @keyframes bar-fire {
+            0%   { background-position: 0% 50%; }
+            100% { background-position: 200% 50%; }
+        }
+    </style>
     <script src="phaser.min.js"></script>
 </head>
 <body>
@@ -75,7 +91,7 @@
                 <div style="color:#00ff66; font-size:10px; letter-spacing:2px; text-transform:uppercase; margin-bottom:4px; text-align:center;">Objective</div>
                 <div style="display:flex; align-items:center; gap:10px;">
                     <div style="flex:1; height:9px; background:rgba(255,255,255,0.08); border-radius:999px; overflow:hidden;">
-                        <div id="objective-progress" style="width:0%; height:100%; background:linear-gradient(90deg, #00ff66, #00f3ff); border-radius:999px; transition:width 0.2s ease;"></div>
+                        <div id="objective-progress" style="width:0%; height:100%; border-radius:999px; transition:width 0.2s ease;"></div>
                     </div>
                     <span style="white-space:nowrap;"><span id="percent-text" style="color:#fff; font-size:16px; font-weight:800;">0</span><span style="color:#7f8a8a; font-size:12px;"> / 80%</span></span>
                 </div>
