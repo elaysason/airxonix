@@ -891,7 +891,8 @@ function showCaptureJuice(points, isBig) {
     });
 
     if (isBig) {
-        let big = mainScene.add.text(config.width / 2, config.height / 2, 'BIG CAPTURE!', {
+        let phrase = BIG_CAPTURE_PHRASES[Math.floor(Math.random() * BIG_CAPTURE_PHRASES.length)];
+        let big = mainScene.add.text(config.width / 2, config.height / 2, phrase, {
             fontSize: '40px',
             fontFamily: 'Arial',
             fontStyle: 'bold',
@@ -916,6 +917,21 @@ function showCaptureJuice(points, isBig) {
         });
     }
 }
+
+// Funny Hebrew celebration lines shown on a big capture (picked at random).
+const BIG_CAPTURE_PHRASES = [
+    'אלוף העולם!',
+    'וואו איזה כיבוש',
+    'חיה רעה',
+    'סחתן עליך',
+    'מלך המסך',
+    'כפרה עליך',
+    'אין עליך בעולם',
+    'תותח על',
+    'לא יאומן כי יסופר',
+    'נשק לא קונבנציונלי',
+    'פשוט חיה'
+];
 
 // 1. CALL THIS WHEN YOU DIE
 function showGameOver(reason = 'You were caught!') {
