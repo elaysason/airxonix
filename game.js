@@ -38,6 +38,7 @@ let PLAYER_SPEED = 4;       // Speed: 4 = Normal, 8 = Fast
 const BASE_PLAYER_SPEED = 4; // Default speed to restore to when Speed powerup ends
 let ballSpeed = 150;        // Current enemy speed; (re)set per level in create()
 let announcedEnemyTypes = new Set(); // Enemy types already introduced this level (once-per-type callout)
+let trailStartLand = null;   // Land tile the current trail departed from (for out-and-back detection)
 let isMoving = false;     
 let targetPos = {x: 0, y: 0};
 let enemyGroup;
@@ -303,6 +304,7 @@ function create() {
     activePowerups = { shield: false, speed: false };
     // Re-teach enemy types each level: clear the "already introduced" set.
     announcedEnemyTypes = new Set();
+    trailStartLand = null;
     // Only reset score if it's Level 1
     if (level === 1) score = 0;
     
@@ -657,11 +659,35 @@ function processMovement() {
     
     // LOOP CLOSING: If we hit land from a trail
     if (nextTileType === 1 && grid[gridX][gridY] === 2) {
+        // Trivial out-and-back: a single-tile trail returning to the exact land
+        // tile we departed from encloses nothing (e.g. up one tile then straight
+        // back down). Cancel it — revert the lone trail tile, bank nothing.
+        // (A 1-tile trail closing onto a DIFFERENT land tile can seal a real
+        // pocket, so we only cancel the exact same-tile return.)
+        if (trailStartLand && trailStartLand.x === nextX && trailStartLand.y === nextY
+            && trailLength() <= 1) {
+            grid[gridX][gridY] = 0;
+            trailGroup.clear(true, true);
+            // Snap the player back onto the departure land tile so they are never
+            // left stranded on the now-empty tile (keeps the on-land invariant).
+            player.x = nextX * TILE_SIZE;
+            player.y = nextY * TILE_SIZE;
+            targetPos = { x: player.x, y: player.y };
+            isMoving = false;
+            trailStartLand = null;
+            currentDir = { x: 0, y: 0 };
+            return;
+        }
         triggerFill();
+        trailStartLand = null;
     }
 
     // LOGIC: Mark the destination as dangerous IMMEDIATELY so you can't turn back
     if (nextTileType === 0) {
+        // Record the land tile this trail departed from (first step off land).
+        if (grid[gridX][gridY] === 1) {
+            trailStartLand = { x: gridX, y: gridY };
+        }
         grid[nextX][nextY] = 2; 
     }
 
@@ -677,6 +703,70 @@ function processMovement() {
     // Start sliding
     targetPos = { x: nextX * TILE_SIZE, y: nextY * TILE_SIZE };
     isMoving = true;
+}
+
+// Count current trail tiles (grid value 2).
+function trailLength() {
+    let n = 0;
+    for (let x = 0; x < COLS; x++) {
+        for (let y = 0; y < ROWS; y++) {
+            if (grid[x][y] === 2) n++;
+        }
+    }
+    return n;
+}
+
+// Seed the flood-fill "safe" map from a single enemy. Every LIVE enemy must
+// contribute at least one seed, otherwise its region can be wrongly captured.
+// Strategy: seed from every empty tile the enemy's body overlaps; if none of
+// those are empty (enemy momentarily fully over land/border), BFS outward to the
+// nearest empty tile and seed from that.
+function seedEnemy(enemy, safeMap, stack) {
+    if (!enemy || !enemy.active) return;
+    const r = (enemy.body && enemy.body.radius) ? enemy.body.radius : 10;
+    const cx = Math.floor(enemy.x / TILE_SIZE);
+    const cy = Math.floor(enemy.y / TILE_SIZE);
+    const minX = Math.floor((enemy.x - r) / TILE_SIZE);
+    const maxX = Math.floor((enemy.x + r) / TILE_SIZE);
+    const minY = Math.floor((enemy.y - r) / TILE_SIZE);
+    const maxY = Math.floor((enemy.y + r) / TILE_SIZE);
+
+    let seeded = false;
+    for (let ex = minX; ex <= maxX; ex++) {
+        for (let ey = minY; ey <= maxY; ey++) {
+            if (ex >= 0 && ex < COLS && ey >= 0 && ey < ROWS &&
+                grid[ex][ey] === 0 && !safeMap[ex][ey]) {
+                safeMap[ex][ey] = true;
+                stack.push({ x: ex, y: ey });
+                seeded = true;
+            }
+        }
+    }
+    if (seeded) return;
+
+    // Fallback: no empty tile in the body box. BFS outward from the enemy's
+    // center tile to find the nearest empty tile and seed from it.
+    const seen = new Set();
+    const q = [{ x: cx, y: cy }];
+    seen.add(cx + ',' + cy);
+    while (q.length > 0) {
+        const p = q.shift();
+        if (p.x >= 0 && p.x < COLS && p.y >= 0 && p.y < ROWS &&
+            grid[p.x][p.y] === 0) {
+            if (!safeMap[p.x][p.y]) {
+                safeMap[p.x][p.y] = true;
+                stack.push({ x: p.x, y: p.y });
+            }
+            return;
+        }
+        for (const n of [{x:p.x+1,y:p.y},{x:p.x-1,y:p.y},{x:p.x,y:p.y+1},{x:p.x,y:p.y-1}]) {
+            const key = n.x + ',' + n.y;
+            if (n.x >= 0 && n.x < COLS && n.y >= 0 && n.y < ROWS && !seen.has(key)) {
+                seen.add(key);
+                q.push(n);
+            }
+        }
+    }
 }
 
 function triggerFill() {
@@ -700,28 +790,9 @@ function triggerFill() {
 
     let stack = [];
 
-    // 3. SEED FROM ENEMIES: Mark areas enemies can reach as "Safe".
-    // An enemy is a circle spanning several tiles; at capture time its center
-    // tile may momentarily read as land/boundary. If we only seeded from the
-    // center tile, such an enemy would be skipped and wrongly captured. So seed
-    // from every empty tile its body overlaps (bounding box of its radius).
-    enemyGroup.children.iterate((enemy) => {
-        if (!enemy || !enemy.active) return;
-        const r = (enemy.body && enemy.body.radius) ? enemy.body.radius : 10;
-        const minX = Math.floor((enemy.x - r) / TILE_SIZE);
-        const maxX = Math.floor((enemy.x + r) / TILE_SIZE);
-        const minY = Math.floor((enemy.y - r) / TILE_SIZE);
-        const maxY = Math.floor((enemy.y + r) / TILE_SIZE);
-        for (let ex = minX; ex <= maxX; ex++) {
-            for (let ey = minY; ey <= maxY; ey++) {
-                if (ex >= 0 && ex < COLS && ey >= 0 && ey < ROWS &&
-                    grid[ex][ey] === 0 && !safeMap[ex][ey]) {
-                    stack.push({ x: ex, y: ey });
-                    safeMap[ex][ey] = true;
-                }
-            }
-        }
-    });
+    // 3. SEED FROM ENEMIES: every live enemy contributes at least one seed so
+    // its region is never wrongly captured (see seedEnemy for the fallback).
+    enemyGroup.children.iterate((enemy) => seedEnemy(enemy, safeMap, stack));
 
     // 4. EXECUTE FLOOD FILL
     while (stack.length > 0) {
@@ -980,25 +1051,8 @@ function generateSafeMap() {
 
     let stack = [];
 
-    // Seed from enemies' bodies (every empty tile their circle overlaps), so a
-    // boundary-hugging enemy still counts. Mirrors the seeding in triggerFill.
-    enemyGroup.children.iterate((enemy) => {
-        if (!enemy || !enemy.active) return;
-        const r = (enemy.body && enemy.body.radius) ? enemy.body.radius : 10;
-        const minX = Math.floor((enemy.x - r) / TILE_SIZE);
-        const maxX = Math.floor((enemy.x + r) / TILE_SIZE);
-        const minY = Math.floor((enemy.y - r) / TILE_SIZE);
-        const maxY = Math.floor((enemy.y + r) / TILE_SIZE);
-        for (let ex = minX; ex <= maxX; ex++) {
-            for (let ey = minY; ey <= maxY; ey++) {
-                if (ex >= 0 && ex < COLS && ey >= 0 && ey < ROWS &&
-                    grid[ex][ey] === 0 && !safeMap[ex][ey]) {
-                    safeMap[ex][ey] = true;
-                    stack.push({ x: ex, y: ey });
-                }
-            }
-        }
-    });
+    // Seed from enemies (robust: every live enemy contributes a seed). Mirrors triggerFill.
+    enemyGroup.children.iterate((enemy) => seedEnemy(enemy, safeMap, stack));
 
     // Flood-fill outward through empty tiles
     while (stack.length > 0) {
