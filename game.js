@@ -537,6 +537,43 @@ function create() {
         block.setOrigin(0); 
         block.refreshBody(); // Important for static physics bodies!
     }
+// Precise check: does a circle at (sx, sy) with radius r overlap the tile (gx, gy)?
+function tileOverlapsCircle(gx, gy, sx, sy, r) {
+    const tx = gx * TILE_SIZE;
+    const ty = gy * TILE_SIZE;
+    const cx = Phaser.Math.Clamp(sx, tx, tx + TILE_SIZE);
+    const cy = Phaser.Math.Clamp(sy, ty, ty + TILE_SIZE);
+    return Phaser.Math.Distance.Between(sx, sy, cx, cy) <= r;
+}
+
+// Swept trail collision: sample the segment the ball traveled since the previous
+// frame and kill the player if the ball's body touches any trail tile (grid 2).
+function checkTrailSegment(ball, px, py, cx, cy) {
+    if (activePowerups.shield) return false;
+    const r = (ball.body && ball.body.radius) ? ball.body.radius : 10;
+    const dist = Phaser.Math.Distance.Between(px, py, cx, cy);
+    const steps = Math.max(1, Math.ceil(dist / 5)); // sample every 5px so consecutive circles overlap
+    for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const sx = px + (cx - px) * t;
+        const sy = py + (cy - py) * t;
+        const minX = Math.floor((sx - r) / TILE_SIZE);
+        const maxX = Math.floor((sx + r) / TILE_SIZE);
+        const minY = Math.floor((sy - r) / TILE_SIZE);
+        const maxY = Math.floor((sy + r) / TILE_SIZE);
+        for (let gx = minX; gx <= maxX; gx++) {
+            for (let gy = minY; gy <= maxY; gy++) {
+                if (gx < 0 || gx >= COLS || gy < 0 || gy >= ROWS) continue;
+                if (grid[gx][gy] === 2 && tileOverlapsCircle(gx, gy, sx, sy, r)) {
+                    showGameOver('An enemy hit your trail. Reach land before they touch it.');
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 function update(time, delta) {
     if (isGameOver || isPaused || !gameStarted) return;
 
@@ -557,10 +594,21 @@ function update(time, delta) {
         let gy = Math.floor(ball.y / TILE_SIZE);
 
         // Trail Collision
+        // Continuous (swept) check: fast enemies can cross a fresh trail entirely
+        // within one frame, so we test the whole path swept since the previous
+        // frame (using the ball's body radius) rather than just its center tile.
+        if (ball.prevX !== undefined) {
+            if (checkTrailSegment(ball, ball.prevX, ball.prevY, ball.x, ball.y)) return;
+        }
+        ball.prevX = ball.x;
+        ball.prevY = ball.y;
+
+        // Fallback: direct center-tile check (covers the first frame after spawn).
         if (grid[gx] && grid[gx][gy] === 2) {
             if (!activePowerups.shield) {
                 showGameOver('An enemy hit your trail. Reach land before they touch it.');
             }
+            return;
         }
         
         // Player Collision (Reduced hitbox slightly for fairness)
