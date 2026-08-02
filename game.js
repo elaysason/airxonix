@@ -2,7 +2,12 @@ const config = {
         type: Phaser.AUTO,
         width: 800,
         height: 600,
-        backgroundColor: '#000000',
+        // The 3D layer (render3d.js) draws the board, player, enemies and
+        // powerups on a WebGL canvas underneath. Phaser keeps running the whole
+        // simulation but renders only text/HUD effects, so its canvas is
+        // transparent and parented into the same #stage box for 1:1 alignment.
+        transparent: true,
+        parent: 'stage',
         physics: {
             default: 'arcade',
             arcade: { gravity: { y: 0 }, debug: false }
@@ -13,6 +18,15 @@ const config = {
             update: update
         }
     };
+
+// Convenience wrapper: map a game-space point to overlay-canvas pixels via the
+// 3D camera. Falls back to identity if the 3D layer has not booted yet.
+function to3DScreen(gameX, gameY, height) {
+    if (window.Render3D && window.Render3D.isReady()) {
+        return window.Render3D.projectToScreen(gameX, gameY, height);
+    }
+    return { x: gameX, y: gameY };
+}
 let powerupGroup;
 let activePowerups = {
     shield: false,
@@ -34,8 +48,10 @@ let cursors;             // Stores arrow key states
 let currentDir = {x:0, y:0}; // Where we are moving NOW
 let nextDir = {x:0, y:0};    // Where we WANT to move (Input Buffer)
 let dirStack = [];           // Currently-held directions, in press order (last = most recent)
-let PLAYER_SPEED = 4;       // Speed: 4 = Normal, 8 = Fast
-const BASE_PLAYER_SPEED = 4; // Default speed to restore to when Speed powerup ends
+// Pixels per second. Movement used to be 4 pixels per rendered frame, making it
+// visibly slower and input-laggier whenever the 3D renderer dipped below 60 FPS.
+let PLAYER_SPEED = 240;
+const BASE_PLAYER_SPEED = 240;
 let ballSpeed = 150;        // Current enemy speed; (re)set per level in create()
 let announcedEnemyTypes = new Set(); // Enemy types already introduced this level (once-per-type callout)
 let trailStartLand = null;   // Land tile the current trail departed from (for out-and-back detection)
@@ -108,7 +124,7 @@ function recordHighScore(currentScore, currentLevel) {
 
 function renderStartBest() {
     if (domElements.startBest) {
-        domElements.startBest.innerText = `Best: ${highScore.score} · Level ${highScore.level}`;
+        domElements.startBest.innerText = `שיא: ${highScore.score} · שלב ${highScore.level}`;
     }
 }
 
@@ -319,6 +335,9 @@ function create() {
         domElements.levelText.innerText = level;
     }
 
+    // Drop 3D meshes belonging to the previous scene and replay capture pop-ups.
+    if (window.Render3D) window.Render3D.reset();
+
     // 2. BUILD THE GRID
     for(let x=0; x<COLS; x++) {
         grid[x] = [];
@@ -353,6 +372,7 @@ function create() {
     player.body.setSize(14, 14);
     player.body.setOffset(3, 3); // Center the 14x14 body within the 20x20 sprite
     player.setDepth(100);
+    player.setVisible(false); // Drawn in 3D by render3d.js
 
 // 5. ADD PARTICLES
     let particles = this.add.particles(0, 0, 'player', {
@@ -361,11 +381,17 @@ function create() {
             lifespan: 400,
             alpha: { start: 0.5, end: 0 }, // Start semi-transparent
             tint: 0xedff21,                // FORCE the "Electric Lemon" color
-            blendMode: 'NORMAL'            // 'NORMAL' keeps the yellow from turning white
+            blendMode: 'NORMAL',           // 'NORMAL' keeps the yellow from turning white
+            emitting: false                // See below: replaced by the 3D glow
         });
-    
-    particles.setDepth(50); 
+
+    particles.setDepth(50);
     particles.startFollow(player, 10, 10);
+    // 2D particle trail is replaced by the player's 3D glow/point light.
+    // setVisible(false) alone only stopped it being DRAWN — the emitter kept
+    // spawning and simulating hundreds of particles per second for nothing, so
+    // emission is switched off at the source.
+    particles.setVisible(false);
     let s = this.make.graphics({x:0, y:0});
     s.fillStyle(0xffffff); // White
     s.fillCircle(2, 2, 2); // Tiny dot
@@ -379,6 +405,9 @@ function create() {
         blendMode: 'ADD',             // Glowing effect
         emitting: false               // Don't fire yet!
     });
+    // Bounce splash is a flat 2D burst; it would not line up with the tilted 3D
+    // board, so it is never emitted (see the collider below).
+    splashEmitter.setVisible(false);
     // 6. CONTROLS
     cursors = this.input.keyboard.createCursorKeys();
     keyW = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W);
@@ -393,9 +422,15 @@ function create() {
             // Remove any stale entry for this exact key, then push as most-recent
             dirStack = dirStack.filter(e => e.key !== key);
             dirStack.push({ key, dir });
+            nextDir = dir;
         });
         key.on('up', () => {
             dirStack = dirStack.filter(e => e.key !== key);
+            // Immediately fall back to the previous still-held key. When no key
+            // remains, clear the request instead of replaying a stale direction.
+            nextDir = dirStack.length > 0
+                ? dirStack[dirStack.length - 1].dir
+                : { x: 0, y: 0 };
         });
     };
     bindDir(cursors.left,  { x: -1, y: 0 });
@@ -420,9 +455,11 @@ function create() {
 
 // REPLACE your old collider with this:
     this.physics.add.collider(enemyGroup, landGroup, (ball, block) => {
-        
-        // 1. SPLASH EFFECT (For ALL balls)
-        splashEmitter.explode(10, ball.x, ball.y); // Burst 10 particles
+
+        // 1. SPLASH EFFECT
+        // The 2D burst is invisible (it would not line up with the tilted 3D
+        // board), and this collider fires many times per second per enemy, so
+        // emitting here meant continuously simulating particles nobody sees.
 
         // 2. DESTROYER LOGIC (Only for Orange balls)
         if (ball.isDestroyer) {
@@ -448,17 +485,10 @@ function create() {
         spawnEnemy(enemyType);
     }
     this.physics.world.on('worldbounds', (body) => {
-        // Trigger the same splash at the ball's position
-        splashEmitter.explode(10, body.x, body.y);
+        // Splash burst intentionally omitted: see the collider above.
     });
-    mainScene.tweens.add({
-    targets: player,
-    alpha: 0.7,
-    duration: 800,
-    ease: 'Sine.easeInOut',
-    yoyo: true,
-    repeat: -1
-});
+    // The player sprite itself is invisible (drawn in 3D), so the old infinite
+    // alpha pulse tween on it was pure bookkeeping every frame.
     // Create full-screen tint overlays (will be faded in on powerup)
     screenTintShield = this.add.tileSprite(config.width / 2, config.height / 2, config.width, config.height, 'tint_shield');
     screenTintShield.setOrigin(0.5);
@@ -535,6 +565,7 @@ function create() {
         // We place it at x*20, y*20. origin(0) means top-left corner.
         let block = landGroup.create(x * TILE_SIZE, y * TILE_SIZE, 'land');
         block.setOrigin(0); 
+        block.setVisible(false); // Drawn in 3D by render3d.js (physics body still used)
         block.refreshBody(); // Important for static physics bodies!
     }
 // Precise check: does a circle at (sx, sy) with radius r overlap the tile (gx, gy)?
@@ -584,7 +615,7 @@ function update(time, delta) {
     }
 
     // 2. MOVEMENT ENGINE (Runs every frame for smooth sliding)
-    processMovement();
+    processMovement(delta);
 
     // 3. ENEMY LOGIC - Handle different enemy types
     enemyGroup.children.iterate((ball) => {
@@ -606,7 +637,7 @@ function update(time, delta) {
         // Fallback: direct center-tile check (covers the first frame after spawn).
         if (grid[gx] && grid[gx][gy] === 2) {
             if (!activePowerups.shield) {
-                showGameOver('An enemy hit your trail. Reach land before they touch it.');
+                showGameOver('אויב פגע בשובל שלכם. חזרו לשטח כבוש לפני שהם נוגעים בו.');
             }
             return;
         }
@@ -617,7 +648,7 @@ function update(time, delta) {
         let playerCY = player.y + TILE_SIZE / 2;
         let dist = Phaser.Math.Distance.Between(ball.x, ball.y, playerCX, playerCY);
         if (dist < 15 && !activePowerups.shield) {
-            showGameOver('An enemy touched you. Stay on the border or keep your distance.');
+            showGameOver('אויב נגע בכם. הישארו על הגבול או שמרו מרחק.');
         }
         
         // Special enemy behaviors
@@ -647,16 +678,24 @@ function update(time, delta) {
     });
 }
 
-function processMovement() {
+function processMovement(delta) {
+    // Clamp long background-tab frames so returning to the game cannot skip
+    // several grid cells. At normal frame rates this is 4px, matching the old
+    // 60 FPS speed while remaining consistent when rendering is slower.
+    const frameStep = PLAYER_SPEED * Math.min(delta, 34) / 1000;
+
     // --- STATE 1: SLIDING TOWARDS TARGET ---
     if (isMoving) {
-        player.x = moveTowards(player.x, targetPos.x, PLAYER_SPEED);
-        player.y = moveTowards(player.y, targetPos.y, PLAYER_SPEED);
+        player.x = moveTowards(player.x, targetPos.x, frameStep);
+        player.y = moveTowards(player.y, targetPos.y, frameStep);
 
         if (player.x === targetPos.x && player.y === targetPos.y) {
             isMoving = false;
+        } else {
+            return;
         }
-        return; 
+        // Continue into STATE 2 immediately. Previously every tile arrival
+        // burned a full frame before the queued turn could be processed.
     }
 
     // --- STATE 2: DECISION TIME ---
@@ -745,6 +784,7 @@ function processMovement() {
     if (grid[gridX][gridY] === 2) {
          let trail = mainScene.add.image(gridX * TILE_SIZE, gridY * TILE_SIZE, 'trail');
          trail.setOrigin(0);
+         trail.setVisible(false); // Drawn in 3D from the grid by render3d.js
          trailGroup.add(trail);
     }
 
@@ -878,6 +918,11 @@ function triggerFill() {
     if (filledCount > 20) {
         mainScene.cameras.main.flash(500); // White flash for 0.5s
         mainScene.cameras.main.shake(100, 0.01); // Tiny rumble
+        // Phaser's camera only moves the 2D overlay, so drive the 3D camera too.
+        if (window.Render3D) {
+            window.Render3D.flash(500);
+            window.Render3D.shake(100, 0.01);
+        }
         igniteObjectiveBar(); // Objective bar briefly turns to fire
     }
 
@@ -987,8 +1032,11 @@ function igniteObjectiveBar() {
 function showCaptureJuice(points, isBig) {
     if (!mainScene || !player) return;
 
-    let px = player.x + TILE_SIZE / 2;
-    let py = player.y;
+    // Anchor the popup over the player's projected 3D position, not its flat
+    // grid coordinate, so the text sits on the player in the tilted view.
+    let anchor = to3DScreen(player.x + TILE_SIZE / 2, player.y + TILE_SIZE / 2);
+    let px = anchor.x;
+    let py = anchor.y - 12;
 
     let gain = mainScene.add.text(px, py, `+${points}`, {
         fontSize: '18px',
@@ -1053,7 +1101,7 @@ const BIG_CAPTURE_PHRASES = [
 ];
 
 // 1. CALL THIS WHEN YOU DIE
-function showGameOver(reason = 'You were caught!') {
+function showGameOver(reason = 'נתפסתם!') {
     if (isGameOver) return; // Guard against repeat calls within the same frame
     isGameOver = true; // <--- LOCK KEYS
     mainScene.physics.pause();
@@ -1072,8 +1120,8 @@ function showGameOver(reason = 'You were caught!') {
     renderStartBest();
     if (domElements.bestScoreLine) {
         domElements.bestScoreLine.innerText = isNewRecord
-            ? `New Best! ${highScore.score} · Level ${highScore.level}`
-            : `Best: ${highScore.score} · Level ${highScore.level}`;
+            ? `שיא חדש! ${highScore.score} · שלב ${highScore.level}`
+            : `שיא: ${highScore.score} · שלב ${highScore.level}`;
     }
     
     // Get the element
@@ -1176,8 +1224,8 @@ function levelComplete() {
     
     // Create a "You Win" popup (or reuse the Game Over one with different text)
     let popup = domElements.gameOverScreen;
-    popup.querySelector('h1').innerText = "LEVEL COMPLETE!";
-    popup.querySelector('button').innerText = "Play Again";
+    popup.querySelector('h1').innerText = "השלב הושלם!";
+    popup.querySelector('button').innerText = "שחקו שוב";
     popup.querySelector('button').style.background = '#00ff00';
     popup.style.display = 'block';
     popup.style.background = '#006600';     // Dark Green Background
@@ -1295,6 +1343,7 @@ function spawnEnemy(enemyType = 'normal') {
     ball.body.onWorldBounds = true;
     ball.setCircle(10);
     ball.setDepth(50);
+    ball.setVisible(false); // Drawn in 3D by render3d.js
     
     // Custom properties
     ball.enemyType = enemyType;
@@ -1312,11 +1361,11 @@ function spawnEnemy(enemyType = 'normal') {
 
 // Enemy type introductions: label + one-line description + color.
 const ENEMY_INFO = {
-    normal:    { label: 'ENEMY',     desc: 'Standard',        color: '#ffaa00' },
-    fast:      { label: 'FAST',      desc: '1.8x speed',      color: '#00ffff' },
-    destroyer: { label: 'DESTROYER', desc: 'Removes land',    color: '#ff3333' },
-    homing:    { label: 'HOMING',    desc: 'Follows you',     color: '#9900ff' },
-    bouncer:   { label: 'BOUNCER',   desc: 'Erratic',         color: '#00ff66' }
+    normal:    { label: 'אויב',    desc: 'רגיל',            color: '#ffaa00' },
+    fast:      { label: 'מהיר',    desc: 'מהירות פי 1.8',   color: '#00ffff' },
+    destroyer: { label: 'הורס',    desc: 'מוחק שטח',        color: '#ff3333' },
+    homing:    { label: 'נעול בפנים',  desc: 'עוקב אחריכם',     color: '#9900ff' },
+    bouncer:   { label: 'מטורף',    desc: 'בלתי צפוי',       color: '#00ff66' }
 };
 
 // Show a brief callout the first time a given enemy type spawns in a level.
@@ -1328,8 +1377,9 @@ function announceEnemyType(enemyType, x, y) {
     const info = ENEMY_INFO[enemyType] || ENEMY_INFO.normal;
 
     // Keep the label on-screen even when the enemy spawns near an edge.
-    let tx = Phaser.Math.Clamp(x, 70, config.width - 70);
-    let ty = Phaser.Math.Clamp(y - 24, 20, config.height - 20);
+    let scr = to3DScreen(x, y);
+    let tx = Phaser.Math.Clamp(scr.x, 70, config.width - 70);
+    let ty = Phaser.Math.Clamp(scr.y - 24, 20, config.height - 20);
 
     let msg = mainScene.add.text(tx, ty, `${info.label} — ${info.desc}`, {
         fontSize: '14px',
@@ -1445,6 +1495,7 @@ function spawnPowerup() {
         p.setOrigin(0);
         p.setDepth(200); // Forces it above everything
         p.setAlpha(1);   // Ensures it isn't transparent
+        p.setVisible(false); // Drawn in 3D by render3d.js
         
         // Add a scale pulse so it doesn't look like a static "fake" block
         mainScene.tweens.add({
@@ -1498,8 +1549,14 @@ function clearSpeedPowerup() {
     if (powerupHudBar) powerupHudBar.setVisible(false);
     if (powerupTimerText) powerupTimerText.setVisible(false);
 }
+const POWERUP_NAMES = {
+    powerup_shield: 'מגן',
+    powerup_speed: 'מהירות'
+};
+
 function applyPowerup(key) {
-    let msg = mainScene.add.text(player.x, player.y - 20, key.split('_')[1].toUpperCase(), {
+    let pickAnchor = to3DScreen(player.x + TILE_SIZE / 2, player.y + TILE_SIZE / 2);
+    let msg = mainScene.add.text(pickAnchor.x, pickAnchor.y - 20, POWERUP_NAMES[key] || key, {
         fontSize: '16px',
         fill: '#fff',
         fontWeight: 'bold'
@@ -1521,7 +1578,8 @@ function applyPowerup(key) {
         player.setTint(0x00ff00);
 
         // Add a green aura image that follows the player (safer than emitter APIs)
-        let shieldAura = mainScene.add.image(player.x + 10, player.y + 10, 'glow_shield');
+        let shieldAnchor = to3DScreen(player.x + TILE_SIZE / 2, player.y + TILE_SIZE / 2);
+        let shieldAura = mainScene.add.image(shieldAnchor.x, shieldAnchor.y, 'glow_shield');
         shieldAura.setOrigin(0.5);
         shieldAura.setDepth(90);
         shieldAura.setBlendMode(Phaser.BlendModes.ADD);
@@ -1537,11 +1595,12 @@ function applyPowerup(key) {
             repeat: -1
         });
 
-        // Follow on each frame
+        // Follow on each frame (tracks the player's projected 3D position)
         let shieldFollow = () => {
             if (shieldAura && player) {
-                shieldAura.x = player.x + 10;
-                shieldAura.y = player.y + 10;
+                let a = to3DScreen(player.x + TILE_SIZE / 2, player.y + TILE_SIZE / 2);
+                shieldAura.x = a.x;
+                shieldAura.y = a.y;
             }
         };
         mainScene.events.on('update', shieldFollow);
@@ -1585,7 +1644,7 @@ function applyPowerup(key) {
             }
             
             if (powerupTimerText) {
-                powerupTimerText.setText(`SHIELD ${Math.ceil(remaining / 1000)}s`);
+                powerupTimerText.setText(`מגן ${Math.ceil(remaining / 1000)} שנ׳`);
                 powerupTimerText.setColor(percent > 0.2 ? '#00ff00' : '#ff6600');
             }
         };
@@ -1601,7 +1660,8 @@ function applyPowerup(key) {
         PLAYER_SPEED = BASE_PLAYER_SPEED * 2; 
 
         // Add a purple aura image that follows the player
-        let speedAura = mainScene.add.image(player.x + 10, player.y + 10, 'glow_speed');
+        let speedAnchor = to3DScreen(player.x + TILE_SIZE / 2, player.y + TILE_SIZE / 2);
+        let speedAura = mainScene.add.image(speedAnchor.x, speedAnchor.y, 'glow_speed');
         speedAura.setOrigin(0.5);
         speedAura.setDepth(90);
         speedAura.setBlendMode(Phaser.BlendModes.ADD);
@@ -1617,11 +1677,12 @@ function applyPowerup(key) {
             repeat: -1
         });
 
-        // Follow on each frame
+        // Follow on each frame (tracks the player's projected 3D position)
         let speedFollow = () => {
             if (speedAura && player) {
-                speedAura.x = player.x + 10;
-                speedAura.y = player.y + 10;
+                let a = to3DScreen(player.x + TILE_SIZE / 2, player.y + TILE_SIZE / 2);
+                speedAura.x = a.x;
+                speedAura.y = a.y;
             }
         };
         mainScene.events.on('update', speedFollow);
@@ -1665,7 +1726,7 @@ function applyPowerup(key) {
             }
             
             if (powerupTimerText) {
-                powerupTimerText.setText(`SPEED ${Math.ceil(remaining / 1000)}s`);
+                powerupTimerText.setText(`מהירות ${Math.ceil(remaining / 1000)} שנ׳`);
                 powerupTimerText.setColor(percent > 0.2 ? '#ff00ff' : '#ffaa00');
             }
         };

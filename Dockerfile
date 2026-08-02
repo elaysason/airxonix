@@ -12,8 +12,10 @@ RUN chgrp -R 0 /var/cache/nginx /var/log/nginx /etc/nginx/conf.d /usr/share/ngin
 # Copy static files to nginx html directory
 COPY index.html /usr/share/nginx/html/
 COPY game.js /usr/share/nginx/html/
+COPY render3d.js /usr/share/nginx/html/
 COPY style.css /usr/share/nginx/html/
 COPY phaser.min.js /usr/share/nginx/html/
+COPY three.min.js /usr/share/nginx/html/
 
 # Switch back to non-root user
 USER 1001

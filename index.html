@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html>
+<html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>Hayadata AirXonix</title>
-    <link rel="stylesheet" href="style.css">
+    <title>היידאטה אייר-קסוניקס</title>
+    <link rel="stylesheet" href="style.css?v=hud-2">
     <style>
         /* Objective bar: calm green normally; ignites into fire on a BIG CAPTURE */
         #objective-progress {
@@ -21,86 +21,129 @@
         }
     </style>
     <script src="phaser.min.js"></script>
+    <script src="three.min.js"></script>
 </head>
 <body>
 
     <!-- Start Screen -->
     <div id="start-screen" style="display:flex; position:absolute; top:0; left:0; width:100%; height:100%; background:linear-gradient(135deg, #0a0a1a 0%, #1a1a3a 100%); z-index:10000; flex-direction:column; justify-content:center; align-items:center; font-family:Arial, sans-serif;">
         <h1 style="color:#00f3ff; font-size:48px; text-shadow: 0 0 20px #00f3ff, 0 0 40px #00f3ff; margin-bottom:10px;">AIR XONIX</h1>
-        <p style="color:#ff00ff; font-size:18px; margin-bottom:20px;">Capture 80% of the field to win!</p>
-        <div id="start-best" style="color:#ffd700; font-size:16px; margin-bottom:20px; text-align:center; text-shadow:0 0 10px rgba(255,215,0,0.4);">Best: 0 · Level 1</div>
+        <p style="color:#ff00ff; font-size:18px; margin-bottom:20px;">כבשו 80% מהשטח כדי לנצח!</p>
+        <div id="start-best" style="color:#ffd700; font-size:16px; margin-bottom:20px; text-align:center; text-shadow:0 0 10px rgba(255,215,0,0.4);">שיא: 0 · שלב 1</div>
         <div style="color:#aaa; font-size:14px; margin-bottom:30px; text-align:center;">
-            <p>🎮 Arrow Keys or WASD to move</p>
-            <p>⏸️ ESC or P to pause</p>
-            <p>🛡️ Collect powerups for special abilities</p>
+            <p>🎮 מקשי חצים או WASD לתנועה</p>
+            <p>⏸️ ESC או P להשהיה</p>
+            <p>🛡️ אספו בונוסים ליכולות מיוחדות</p>
         </div>
         <div style="color:#888; font-size:12px; margin-bottom:20px; text-align:center; line-height:1.8;">
-            <p style="color:#ffaa00;">● Orange - Standard enemy</p>
-            <p style="color:#ff3333;">● Red - Destroyer (removes land)</p>
-            <p style="color:#9900ff;">● Purple - Homing (follows you)</p>
-            <p style="color:#00ffff;">◆ Cyan - Fast (1.8x speed)</p>
-            <p style="color:#00ff66;">■ Green - Bouncer (erratic)</p>
+            <p style="color:#ffaa00;">● כתום — אויב רגיל</p>
+            <p style="color:#ff3333;">● אדום — הורס (מוחק שטח)</p>
+            <p style="color:#9900ff;">● סגול — נעול בפנים (עוקב אחריכם)</p>
+            <p style="color:#00ffff;">◆ תכלת — מהיר (פי 1.8)</p>
+            <p style="color:#00ff66;">■ ירוק — מטורף (בלתי צפוי)</p>
         </div>
-        <button id="start-btn" style="padding:15px 50px; font-size:20px; cursor:pointer; background:linear-gradient(180deg, #00f3ff, #0088aa); border:none; border-radius:10px; color:#000; font-weight:bold; box-shadow: 0 0 20px #00f3ff;">START GAME</button>
+        <button id="start-btn" style="padding:15px 50px; font-size:20px; cursor:pointer; background:linear-gradient(180deg, #00f3ff, #0088aa); border:none; border-radius:10px; color:#000; font-weight:bold; box-shadow: 0 0 20px #00f3ff;">התחילו משחק</button>
     </div>
 
     <!-- Pause Screen -->
     <div id="pause-screen" style="display:none; position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:9998; flex-direction:column; justify-content:center; align-items:center; font-family:Arial, sans-serif;">
-        <h1 style="color:#00f3ff; font-size:42px; text-shadow: 0 0 20px #00f3ff;">PAUSED</h1>
-        <p style="color:#888; font-size:16px; margin-bottom:30px;">Press ESC or P to resume</p>
-        <button onclick="resumeGame()" style="padding:12px 40px; font-size:18px; cursor:pointer; background:#00f3ff; border:none; border-radius:8px; color:#000; font-weight:bold; margin:5px;">Resume</button>
-        <button onclick="restartGame()" style="padding:12px 40px; font-size:18px; cursor:pointer; background:#ff4444; border:none; border-radius:8px; color:#fff; font-weight:bold; margin:5px;">Restart</button>
+        <h1 style="color:#00f3ff; font-size:42px; text-shadow: 0 0 20px #00f3ff;">מושהה</h1>
+        <p style="color:#888; font-size:16px; margin-bottom:30px;">לחצו ESC או P כדי להמשיך</p>
+        <button onclick="resumeGame()" style="padding:12px 40px; font-size:18px; cursor:pointer; background:#00f3ff; border:none; border-radius:8px; color:#000; font-weight:bold; margin:5px;">המשך</button>
+        <button onclick="restartGame()" style="padding:12px 40px; font-size:18px; cursor:pointer; background:#ff4444; border:none; border-radius:8px; color:#fff; font-weight:bold; margin:5px;">התחילו מחדש</button>
     </div>
 
     <div id="game-over-screen" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:linear-gradient(180deg, #440000, #220000); border: 4px solid #ff4444; color:white; padding:30px; text-align:center; font-family:Arial, sans-serif; z-index:9999; border-radius:10px; box-shadow: 0 0 30px rgba(255,0,0,0.5);">
-        <h1 style="color:#ff4444; text-shadow: 0 0 10px #ff0000;">GAME OVER</h1>
-        <p id="death-reason" style="color:#ffaaaa; font-size:16px; margin-bottom:8px;">You were caught!</p>
-        <p style="color:#aaa;">Final Score: <span id="final-score" style="color:#00f3ff; font-weight:bold;">0</span></p>
-        <p id="best-score-line" style="color:#ffd700; font-size:14px; margin-top:4px;">Best: 0</p>
-        <button onclick="restartGame()" style="padding:12px 30px; font-size:16px; cursor:pointer; background:#ff4444; border:none; border-radius:8px; color:#fff; font-weight:bold; margin-top:15px;">Try Again</button>
+        <h1 style="color:#ff4444; text-shadow: 0 0 10px #ff0000;">המשחק נגמר</h1>
+        <p id="death-reason" style="color:#ffaaaa; font-size:16px; margin-bottom:8px;">נתפסתם!</p>
+        <p style="color:#aaa;">ניקוד סופי: <span id="final-score" style="color:#00f3ff; font-weight:bold;">0</span></p>
+        <p id="best-score-line" style="color:#ffd700; font-size:14px; margin-top:4px;">שיא: 0</p>
+        <button onclick="restartGame()" style="padding:12px 30px; font-size:16px; cursor:pointer; background:#ff4444; border:none; border-radius:8px; color:#fff; font-weight:bold; margin-top:15px;">נסו שוב</button>
     </div>
 
     <div id="level-up-screen" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:linear-gradient(180deg, #004400, #002200); border: 4px solid #00ff00; color:white; padding:30px; text-align:center; font-family:Arial, sans-serif; z-index:9999; border-radius:10px; box-shadow: 0 0 30px rgba(0,255,0,0.5);">
-        <h1 style="color:#00ff00; text-shadow: 0 0 10px #00ff00;">LEVEL COMPLETE!</h1>
-        <p style="color:#aaa;">Score: <span id="level-score" style="color:#00f3ff; font-weight:bold;">0</span></p>
-        <button onclick="nextLevel()" style="padding:12px 30px; font-size:16px; cursor:pointer; background:#00ff00; border:none; border-radius:8px; color:#000; font-weight:bold; margin-top:15px;">Next Level</button>
+        <h1 style="color:#00ff00; text-shadow: 0 0 10px #00ff00;">השלב הושלם!</h1>
+        <p style="color:#aaa;">ניקוד: <span id="level-score" style="color:#00f3ff; font-weight:bold;">0</span></p>
+        <button onclick="nextLevel()" style="padding:12px 30px; font-size:16px; cursor:pointer; background:#00ff00; border:none; border-radius:8px; color:#000; font-weight:bold; margin-top:15px;">לשלב הבא</button>
     </div>
 
-    <!-- Improved HUD -->
-    <div id="ui-layer" style="position:absolute; top:14px; left:0; right:0; display:flex; justify-content:center; pointer-events:none; z-index:100; font-family:Arial, sans-serif;">
-        <div style="display:flex; align-items:center; gap:26px; background:rgba(10,10,20,0.78); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px 22px; box-shadow:0 4px 24px rgba(0,0,0,0.5);">
+    <!-- Render stage: the WebGL canvas (3D board) sits underneath Phaser's
+         transparent canvas, which now draws only text/HUD effects.
+         The HUD lives inside the shell so it stays anchored to the frame
+         (and scales with it) instead of floating against the viewport. -->
+    <div id="game-shell-wrap">
+        <div id="game-shell">
 
-            <!-- Score -->
-            <div style="text-align:center;">
-                <div style="color:#00f3ff; font-size:10px; letter-spacing:2px; text-transform:uppercase; margin-bottom:4px;">Score</div>
-                <div id="score-text" style="color:#fff; font-size:26px; line-height:1; font-weight:800;">0</div>
-            </div>
+            <!-- Improved HUD: a real row above the board, so it can never
+                 cover the playfield and always stays with the frame. -->
+            <div id="ui-layer">
+                <div class="hud-panel">
 
-            <div style="width:1px; align-self:stretch; background:rgba(255,255,255,0.1);"></div>
-
-            <!-- Level -->
-            <div style="text-align:center;">
-                <div style="color:#ff00ff; font-size:10px; letter-spacing:2px; text-transform:uppercase; margin-bottom:4px;">Level</div>
-                <div id="level-text" style="color:#fff; font-size:26px; line-height:1; font-weight:800;">1</div>
-            </div>
-
-            <div style="width:1px; align-self:stretch; background:rgba(255,255,255,0.1);"></div>
-
-            <!-- Objective -->
-            <div style="width:260px;">
-                <div style="color:#00ff66; font-size:10px; letter-spacing:2px; text-transform:uppercase; margin-bottom:4px; text-align:center;">Objective</div>
-                <div style="display:flex; align-items:center; gap:10px;">
-                    <div style="flex:1; height:9px; background:rgba(255,255,255,0.08); border-radius:999px; overflow:hidden;">
-                        <div id="objective-progress" style="width:0%; height:100%; border-radius:999px; transition:width 0.2s ease;"></div>
+                    <!-- Score -->
+                    <div class="hud-stat">
+                        <div class="hud-label hud-label--cyan">ניקוד</div>
+                        <div id="score-text" class="hud-value">0</div>
                     </div>
-                    <span style="white-space:nowrap;"><span id="percent-text" style="color:#fff; font-size:16px; font-weight:800;">0</span><span style="color:#7f8a8a; font-size:12px;"> / 80%</span></span>
+
+                    <div class="hud-divider"></div>
+
+                    <!-- Level -->
+                    <div class="hud-stat">
+                        <div class="hud-label hud-label--magenta">שלב</div>
+                        <div id="level-text" class="hud-value">1</div>
+                    </div>
+
+                    <div class="hud-divider"></div>
+
+                    <!-- Objective -->
+                    <div class="hud-objective">
+                        <div class="hud-label hud-label--green">שטח שנכבש</div>
+                        <div class="hud-progress-row">
+                            <div class="hud-progress-track">
+                                <div id="objective-progress"></div>
+                            </div>
+                            <span class="hud-percent"><span id="percent-text">0</span><span> / 80%</span></span>
+                        </div>
+                    </div>
+
                 </div>
             </div>
 
+            <div id="stage"></div>
+
+            <!-- Enemy legend: the same key as the start screen, kept on-screen
+                 during play so you can identify a shape without pausing. -->
+            <div class="stage-legend">
+                <span class="legend-item"><i style="color:#ffaa00"></i>רגיל</span>
+                <span class="legend-item"><i style="color:#ff3333"></i>הורס</span>
+                <span class="legend-item"><i style="color:#9900ff"></i>נעול בפנים</span>
+                <span class="legend-item"><i style="color:#00ffff"></i>מהיר</span>
+                <span class="legend-item"><i style="color:#00ff66"></i>מטורף</span>
+                <span class="legend-controls">חיצים / WASD</span>
+            </div>
         </div>
     </div>
 
-    <script src="game.js"></script>
+    <script src="render3d.js?v=ortho-frame-5"></script>
+    <script src="game.js?v=input-2"></script>
+
+    <script>
+        // Scale the shell (HUD + frame as one unit) down to fit the viewport.
+        // Done in JS because calc(<length> / <length>) is not valid CSS.
+        (function () {
+            var SHELL_W = 828, SHELL_H = 734, MARGIN = 20;
+            function fit() {
+                var s = Math.min(
+                    1,
+                    (window.innerWidth - MARGIN) / SHELL_W,
+                    (window.innerHeight - MARGIN) / SHELL_H
+                );
+                document.documentElement.style.setProperty('--shell-scale', Math.max(s, 0.2));
+            }
+            fit();
+            window.addEventListener('resize', fit);
+        })();
+    </script>
 
 </body>
 </html>
