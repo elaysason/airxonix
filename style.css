@@ -195,11 +195,6 @@ button:hover {
     background: #cc0000;
 }
 
-/* Helper class to hide/show */
-.hidden {
-    display: none;
-}
-
 #level-up-screen {
     display: none; /* Hidden by default */
     position: absolute;

@@ -59,13 +59,11 @@ let isMoving = false;
 let targetPos = {x: 0, y: 0};
 let enemyGroup;
 let mainScene;
-let shieldEdge, speedEdge;
 let screenTintShield, screenTintSpeed;
-let powerupHudBg, powerupHudBar, powerupTimerText;
+let powerupHudBg, powerupTimerText;
 let cornerGlows = [];
 let score = 0;
 let totalTiles = (COLS-2) * (ROWS-2); // Total playable area (excluding borders)
-let filledTiles = 0;
 let trailGroup;
 
 // Cached DOM elements for performance
@@ -237,32 +235,6 @@ function preload () {
         gSpeed.fillCircle(20, 20, 18);
         gSpeed.generateTexture('glow_speed', 40, 40);
 
-        // Edge tile textures (small repeating tiles for animated borders)
-        let tShield = this.make.graphics({x:0, y:0});
-        tShield.fillStyle(0x00ff00, 0.5);
-        tShield.fillRect(0, 0, 20, 20);
-        tShield.generateTexture('edge_tile_shield', 20, 20);
-
-        let tSpeed = this.make.graphics({x:0, y:0});
-        tSpeed.fillStyle(0xff00ff, 0.45);
-        tSpeed.fillRect(0, 0, 20, 20);
-        tSpeed.generateTexture('edge_tile_speed', 20, 20);
-
-        // Create a soft blur texture by drawing concentric circles
-        let blurShield = this.make.graphics({x:0, y:0});
-        for (let i = 12; i >= 2; i -= 2) {
-            blurShield.fillStyle(0x00ff00, 0.06 + (i / 50));
-            blurShield.fillCircle(30, 30, i + 6);
-        }
-        blurShield.generateTexture('edge_blur_shield', 60, 60);
-
-        let blurSpeed = this.make.graphics({x:0, y:0});
-        for (let i = 12; i >= 2; i -= 2) {
-            blurSpeed.fillStyle(0xff00ff, 0.05 + (i / 60));
-            blurSpeed.fillCircle(30, 30, i + 6);
-        }
-        blurSpeed.generateTexture('edge_blur_speed', 60, 60);
-
         // Simple screen tint texture (for subtle overlay)
         let tintShield = this.make.graphics({x:0, y:0});
         tintShield.fillStyle(0x00ff00, 0.2);
@@ -392,22 +364,6 @@ function create() {
     // spawning and simulating hundreds of particles per second for nothing, so
     // emission is switched off at the source.
     particles.setVisible(false);
-    let s = this.make.graphics({x:0, y:0});
-    s.fillStyle(0xffffff); // White
-    s.fillCircle(2, 2, 2); // Tiny dot
-    s.generateTexture('splash', 4, 4);
-    // FIX: Set Depth to 50 so it renders ABOVE the red trail (Depth 0)
-    
-    let splashEmitter = this.add.particles(0, 0, 'splash', {
-        speed: { min: 50, max: 150 }, // Fast burst
-        scale: { start: 1, end: 0 },  // Shrink to nothing
-        lifespan: 300,                // Short life
-        blendMode: 'ADD',             // Glowing effect
-        emitting: false               // Don't fire yet!
-    });
-    // Bounce splash is a flat 2D burst; it would not line up with the tilted 3D
-    // board, so it is never emitted (see the collider below).
-    splashEmitter.setVisible(false);
     // 6. CONTROLS
     cursors = this.input.keyboard.createCursorKeys();
     keyW = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W);
@@ -909,12 +865,6 @@ function triggerFill() {
     
     // 6. UPDATE SCORE & PERCENTAGE
     score += filledCount * 10;
-    let currentLandCount = 0;
-    for (let x = 1; x < COLS - 1; x++) {
-        for (let y = 1; y < ROWS - 1; y++) {
-            if (grid[x][y] === 1) currentLandCount++;
-        }
-    }
     if (filledCount > 20) {
         mainScene.cameras.main.flash(500); // White flash for 0.5s
         mainScene.cameras.main.shake(100, 0.01); // Tiny rumble
@@ -1218,23 +1168,6 @@ function startGame() {
     }
 }
 
-function levelComplete() {
-    isGameOver = true; 
-    mainScene.physics.pause();
-    
-    // Create a "You Win" popup (or reuse the Game Over one with different text)
-    let popup = domElements.gameOverScreen;
-    popup.querySelector('h1').innerText = "השלב הושלם!";
-    popup.querySelector('button').innerText = "שחקו שוב";
-    popup.querySelector('button').style.background = '#00ff00';
-    popup.style.display = 'block';
-    popup.style.background = '#006600';     // Dark Green Background
-    popup.style.borderColor = '#00ff00';    // Bright Green Border
-    
-    popup.querySelector('button').background = '#00ff00';    // Bright Green Button
-    popup.querySelector('button').color = 'black';
-}
-
 // Determine enemy type based on level and spawn index
 function getEnemyTypeForLevel(lvl, index) {
     // Level 1: Only normal enemies
@@ -1307,33 +1240,28 @@ function spawnEnemy(enemyType = 'normal') {
     }
 
     // Determine texture and properties based on type
-    let texture, speed, behavior;
+    let texture, speed;
     
     switch(enemyType) {
         case 'destroyer':
             texture = 'destroyer';
             speed = ballSpeed;
-            behavior = 'destroyer';
             break;
         case 'homing':
             texture = 'homing';
             speed = ballSpeed * 0.6; // Slower but follows player
-            behavior = 'homing';
             break;
         case 'fast':
             texture = 'fast';
             speed = ballSpeed * 1.8; // Much faster
-            behavior = 'fast';
             break;
         case 'bouncer':
             texture = 'bouncer';
             speed = ballSpeed * 1.2;
-            behavior = 'bouncer';
             break;
         default:
             texture = 'enemy';
             speed = ballSpeed;
-            behavior = 'normal';
     }
     
     let ball = enemyGroup.create(rx, ry, texture);
@@ -1527,7 +1455,6 @@ function clearShieldPowerup() {
     mainScene.tweens.add({ targets: screenTintShield, alpha: 0, duration: 200 });
     cornerGlows.forEach(c => mainScene.tweens.add({ targets: c, alpha: 0, duration: 200 }));
     if (powerupHudBg) powerupHudBg.setVisible(false);
-    if (powerupHudBar) powerupHudBar.setVisible(false);
     if (powerupTimerText) powerupTimerText.setVisible(false);
 }
 
@@ -1546,7 +1473,6 @@ function clearSpeedPowerup() {
     mainScene.tweens.add({ targets: screenTintSpeed, alpha: 0, duration: 200 });
     cornerGlows.forEach(c => mainScene.tweens.add({ targets: c, alpha: 0, duration: 200 }));
     if (powerupHudBg) powerupHudBg.setVisible(false);
-    if (powerupHudBar) powerupHudBar.setVisible(false);
     if (powerupTimerText) powerupTimerText.setVisible(false);
 }
 const POWERUP_NAMES = {
@@ -1624,7 +1550,6 @@ function applyPowerup(key) {
         
         // Show HUD bar and pulse
         if (powerupHudBg) powerupHudBg.setVisible(true);
-        if (powerupHudBar) powerupHudBar.setVisible(true);
         if (powerupTimerText) powerupTimerText.setVisible(true);
         let timerTween = mainScene.tweens.add({ targets: powerupTimerText, scale: { from: 1, to: 1.05 }, duration: 400, yoyo: true, repeat: -1 });
         activePowerups.shieldTimerTween = timerTween;
@@ -1634,14 +1559,6 @@ function applyPowerup(key) {
             let elapsed = mainScene.time.now - activePowerups.shieldStartTime;
             let remaining = Math.max(0, activePowerups.shieldDuration - elapsed);
             let percent = remaining / activePowerups.shieldDuration;
-            
-            if (powerupHudBar) {
-                powerupHudBar.clear();
-                powerupHudBar.lineStyle(2, 0x00ff00, 1);
-                powerupHudBar.strokeRect(config.width / 2 - 80, 8, 160, 14);
-                powerupHudBar.fillStyle(0x00ff00, 0.6);
-                powerupHudBar.fillRect(config.width / 2 - 78, 10, 156 * percent, 10);
-            }
             
             if (powerupTimerText) {
                 powerupTimerText.setText(`מגן ${Math.ceil(remaining / 1000)} שנ׳`);
@@ -1706,7 +1623,6 @@ function applyPowerup(key) {
         
         // Show HUD bar and pulse
         if (powerupHudBg) powerupHudBg.setVisible(true);
-        if (powerupHudBar) powerupHudBar.setVisible(true);
         if (powerupTimerText) powerupTimerText.setVisible(true);
         let timerTween = mainScene.tweens.add({ targets: powerupTimerText, scale: { from: 1, to: 1.05 }, duration: 380, yoyo: true, repeat: -1 });
         activePowerups.speedTimerTween = timerTween;
@@ -1716,14 +1632,6 @@ function applyPowerup(key) {
             let elapsed = mainScene.time.now - activePowerups.speedStartTime;
             let remaining = Math.max(0, activePowerups.speedDuration - elapsed);
             let percent = remaining / activePowerups.speedDuration;
-            
-            if (powerupHudBar) {
-                powerupHudBar.clear();
-                powerupHudBar.lineStyle(2, 0xff00ff, 1);
-                powerupHudBar.strokeRect(config.width / 2 - 80, 8, 160, 14);
-                powerupHudBar.fillStyle(0xff00ff, 0.6);
-                powerupHudBar.fillRect(config.width / 2 - 78, 10, 156 * percent, 10);
-            }
             
             if (powerupTimerText) {
                 powerupTimerText.setText(`מהירות ${Math.ceil(remaining / 1000)} שנ׳`);
