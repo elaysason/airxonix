@@ -1,0 +1,4 @@
+# Docker image exports (build artifacts, not source)
+airxonix-*.tar
+airxonix-*.tar.gz
+*.tar.gz
