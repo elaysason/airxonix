@@ -865,12 +865,18 @@ function triggerFill() {
     
     // 6. UPDATE SCORE & PERCENTAGE
     score += filledCount * 10;
+    // Flare the captured land on any successful capture (big captures also flash
+    // + shake below). A larger fill flares a touch longer.
+    if (filledCount > 0 && window.Render3D) {
+        window.Render3D.pulseLand(filledCount > 20 ? 800 : 550);
+    }
     if (filledCount > 20) {
-        mainScene.cameras.main.flash(500); // White flash for 0.5s
         mainScene.cameras.main.shake(100, 0.01); // Tiny rumble
         // Phaser's camera only moves the 2D overlay, so drive the 3D camera too.
+        // Soft, quick white sheen (the old Phaser full-white flash was removed;
+        // its peak alpha can't be lowered, so it always read as a harsh blink).
         if (window.Render3D) {
-            window.Render3D.flash(500);
+            window.Render3D.flash(300, 0.25);
             window.Render3D.shake(100, 0.01);
         }
         igniteObjectiveBar(); // Objective bar briefly turns to fire

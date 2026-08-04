@@ -28,9 +28,10 @@
     const LAND_H = 10;
     const TRAIL_H = 8;
 
-    // Captured land leans blue-violet so it reads separately from the cyan
-    // arena border and grid, while staying in the same cool neon palette.
-    const COLOR_LAND = 0x5c7cff;
+    // Captured land rests at a vivid emerald-green (with a steady glow, see
+    // LAND_REST_EI) and only animates while capturing. It stays clearly distinct
+    // from the cyan arena border, the magenta trail and the yellow player.
+    const COLOR_LAND = 0x2ecb45;
     const COLOR_TRAIL = 0xff00ff;
     const COLOR_PLAYER = 0xedff21;
 
@@ -66,6 +67,14 @@
     let shakeTime = 0, shakeDuration = 0, shakeIntensity = 0;
     let flashAlpha = 0, flashDecay = 0;
     let lastDeadState = null;
+
+    // Captured-land colour state. The land rests at a static "alive" glow and
+    // only animates (a quick bright green flare that settles) while a capture
+    // is happening, driven by pulseLand(). landSettled tracks whether the resting
+    // look has been written, so idle frames skip the material update entirely.
+    const LAND_REST_EI = 0.5;            // resting emissive strength ("alive")
+    let landPulseTime = 0, landPulseDuration = 0;
+    let landSettled = false;
 
     // Reusable scratch objects — avoids allocating per frame.
     const _m4 = new THREE.Matrix4();
@@ -224,9 +233,12 @@
         // captured territory and the border look like one giant cyan wall.
         const landGeo = new THREE.BoxGeometry(TILE * 0.94, LAND_H, TILE * 0.94);
         const landMat = new THREE.MeshLambertMaterial({
-            color: 0x2a45bd,
+            // Dark base so the blue hemisphere sky light has little diffuse to
+            // tint; the self-lit green emissive then dominates and reads as a
+            // saturated emerald rather than a washed-out mint.
+            color: 0x05391b,
             emissive: COLOR_LAND,
-            emissiveIntensity: 0.34
+            emissiveIntensity: LAND_REST_EI
         });
         landMesh = new THREE.InstancedMesh(landGeo, landMat, MAX_CELLS);
         landMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -640,8 +652,27 @@
         syncPowerups(t);
         applyCameraEffects(dt);
 
-        // Material-only pulse: no instance buffer rebuild is needed.
+        // The trail throbs fast (live/dangerous) every frame.
         trailMesh.material.emissiveIntensity = 1.15 + Math.sin(t * 8) * 0.35;
+
+        // The captured land is a static "alive" green MOST of the time, and only
+        // animates while a capture is happening: pulseLand() starts a quick flare
+        // that brightens the glow and pushes the hue toward lime, then eases back
+        // to the resting emerald. When idle we touch the material only once (the
+        // "settle" write) so steady frames do no extra uniform work.
+        if (landPulseTime > 0) {
+            landPulseTime -= dt;
+            const k = Math.max(0, landPulseTime / landPulseDuration); // 1 -> 0
+            // Flare: brighter, and clearly shift emerald (0.40) -> lime-white
+            // (higher lightness, lower saturation) so the colour visibly changes.
+            landMesh.material.emissiveIntensity = LAND_REST_EI + k * 1.6;
+            landMesh.material.emissive.setHSL(0.40 - k * 0.16, 0.95 - k * 0.4, 0.55 + k * 0.18);
+            landSettled = false;
+        } else if (!landSettled) {
+            landMesh.material.emissiveIntensity = LAND_REST_EI;
+            landMesh.material.emissive.setHex(COLOR_LAND);
+            landSettled = true;
+        }
 
         renderer.render(scene, camera);
     }
@@ -668,10 +699,12 @@
             };
         },
 
-        flash: function (durationMs) {
+        flash: function (durationMs, peak) {
             if (!ready) return;
-            flashAlpha = 0.85;
-            flashDecay = 0.85 / Math.max(0.05, (durationMs || 500) / 1000);
+            // Soft sheen by default (was a blinding 0.85 full-screen white).
+            const top = peak !== undefined ? peak : 0.25;
+            flashAlpha = top;
+            flashDecay = top / Math.max(0.05, (durationMs || 500) / 1000);
             flashOverlay.material.opacity = flashAlpha;
             flashOverlay.visible = true;
         },
@@ -681,6 +714,14 @@
             shakeDuration = Math.max(0.05, (durationMs || 100) / 1000);
             shakeTime = shakeDuration;
             shakeIntensity = (intensity || 0.01) * 2400;
+        },
+
+        /** Flare the captured land (brighten + shift toward lime) when territory
+         *  is claimed, then it eases back to the resting emerald. */
+        pulseLand: function (durationMs) {
+            if (!ready) return;
+            landPulseDuration = Math.max(0.05, (durationMs || 600) / 1000);
+            landPulseTime = landPulseDuration;
         },
 
         /** Called on scene restart so capture animations replay for the new level. */
@@ -695,6 +736,8 @@
             flashAlpha = 0;
             flashOverlay.visible = false;
             shakeTime = 0;
+            landPulseTime = 0;
+            landSettled = false;
             camera.position.copy(cameraBase);
             camera.lookAt(cameraTarget);
         }

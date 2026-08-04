@@ -2,6 +2,10 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
+    <!-- Dev: never cache the document, so edits to versioned assets always load. -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>היידאטה אייר-קסוניקס</title>
     <link rel="stylesheet" href="style.css?v=hud-2">
     <style>
@@ -124,8 +128,8 @@
         </div>
     </div>
 
-    <script src="render3d.js?v=ortho-frame-5"></script>
-    <script src="game.js?v=input-2"></script>
+    <script src="render3d.js?v=land-capture-1"></script>
+    <script src="game.js?v=land-capture-1"></script>
 
     <script>
         // Scale the shell (HUD + frame as one unit) down to fit the viewport.
