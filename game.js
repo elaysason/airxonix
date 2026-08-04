@@ -550,7 +550,7 @@ function checkTrailSegment(ball, px, py, cx, cy) {
             for (let gy = minY; gy <= maxY; gy++) {
                 if (gx < 0 || gx >= COLS || gy < 0 || gy >= ROWS) continue;
                 if (grid[gx][gy] === 2 && tileOverlapsCircle(gx, gy, sx, sy, r)) {
-                    showGameOver('An enemy hit your trail. Reach land before they touch it.');
+                    showGameOver('אויב פגע בשובל שלכם. חזרו לשטח כבוש לפני שהם נוגעים בו.');
                     return true;
                 }
             }
