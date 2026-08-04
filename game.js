@@ -60,7 +60,6 @@ let targetPos = {x: 0, y: 0};
 let enemyGroup;
 let mainScene;
 let screenTintShield, screenTintSpeed;
-let powerupHudBg, powerupTimerText;
 let cornerGlows = [];
 let score = 0;
 let totalTiles = (COLS-2) * (ROWS-2); // Total playable area (excluding borders)
@@ -80,7 +79,11 @@ const domElements = {
     deathReason: null,
     bestScoreLine: null,
     startBest: null,
-    levelScore: null
+    levelScore: null,
+    powerupSlot: null,
+    powerupDivider: null,
+    powerupLabel: null,
+    powerupTimer: null
 };
 
 // Persistent high score (best score + highest level reached)
@@ -271,6 +274,10 @@ function create() {
         domElements.bestScoreLine = document.getElementById('best-score-line');
         domElements.startBest = document.getElementById('start-best');
         domElements.levelScore = document.getElementById('level-score');
+        domElements.powerupSlot = document.getElementById('powerup-slot');
+        domElements.powerupDivider = document.getElementById('powerup-divider');
+        domElements.powerupLabel = document.getElementById('powerup-label');
+        domElements.powerupTimer = document.getElementById('powerup-timer');
     }
     
     // Pause game until start button is clicked
@@ -306,6 +313,8 @@ function create() {
     if(domElements.levelText) {
         domElements.levelText.innerText = level;
     }
+    // No powerup is active on a fresh level, so clear the HUD indicator.
+    hidePowerupHud();
 
     // Drop 3D meshes belonging to the previous scene and replay capture pop-ups.
     if (window.Render3D) window.Render3D.reset();
@@ -459,26 +468,6 @@ function create() {
     screenTintSpeed.setBlendMode(Phaser.BlendModes.NORMAL);
     screenTintSpeed.setAlpha(0);
     screenTintSpeed.setScrollFactor(0);
-
-    // Create dark HUD background panel (behind bar and text)
-    powerupHudBg = this.add.graphics();
-    powerupHudBg.fillStyle(0x000000, 0.7);
-    powerupHudBg.fillRect(config.width / 2 - 100, 2, 200, 30);
-    powerupHudBg.setDepth(399);
-    powerupHudBg.setScrollFactor(0);
-    powerupHudBg.setVisible(false);
-
-    // Create timer text
-    powerupTimerText = this.add.text(config.width / 2, 15, '', {
-        fontSize: '14px',
-        fill: '#fff',
-        fontFamily: 'Arial',
-        align: 'center'
-    });
-    powerupTimerText.setOrigin(0.5);
-    powerupTimerText.setDepth(401);
-    powerupTimerText.setScrollFactor(0);
-    powerupTimerText.setVisible(false);
 
     // Create 4 corner glows (top-left, top-right, bottom-left, bottom-right)
     let corners = [
@@ -1455,13 +1444,10 @@ function clearShieldPowerup() {
     if (activePowerups.shieldFollow) { mainScene.events.off('update', activePowerups.shieldFollow); delete activePowerups.shieldFollow; }
     if (activePowerups.shieldAura) { activePowerups.shieldAura.destroy(); delete activePowerups.shieldAura; }
     if (activePowerups.shieldUpdateBar) { mainScene.events.off('update', activePowerups.shieldUpdateBar); delete activePowerups.shieldUpdateBar; }
-    if (activePowerups.shieldTimerTween) { activePowerups.shieldTimerTween.stop(); delete activePowerups.shieldTimerTween; }
     if (activePowerups.shieldCornerTweens) { activePowerups.shieldCornerTweens.forEach(tw => tw.stop()); delete activePowerups.shieldCornerTweens; }
-    if (powerupTimerText) powerupTimerText.setScale(1);
     mainScene.tweens.add({ targets: screenTintShield, alpha: 0, duration: 200 });
     cornerGlows.forEach(c => mainScene.tweens.add({ targets: c, alpha: 0, duration: 200 }));
-    if (powerupHudBg) powerupHudBg.setVisible(false);
-    if (powerupTimerText) powerupTimerText.setVisible(false);
+    hidePowerupHud();
 }
 
 // Tear down all Speed powerup state/visuals. Idempotent + safe to call on re-pickup.
@@ -1473,18 +1459,39 @@ function clearSpeedPowerup() {
     if (activePowerups.speedFollow) { mainScene.events.off('update', activePowerups.speedFollow); delete activePowerups.speedFollow; }
     if (activePowerups.speedAura) { activePowerups.speedAura.destroy(); delete activePowerups.speedAura; }
     if (activePowerups.speedUpdateBar) { mainScene.events.off('update', activePowerups.speedUpdateBar); delete activePowerups.speedUpdateBar; }
-    if (activePowerups.speedTimerTween) { activePowerups.speedTimerTween.stop(); delete activePowerups.speedTimerTween; }
     if (activePowerups.speedCornerTweens) { activePowerups.speedCornerTweens.forEach(tw => tw.stop()); delete activePowerups.speedCornerTweens; }
-    if (powerupTimerText) powerupTimerText.setScale(1);
     mainScene.tweens.add({ targets: screenTintSpeed, alpha: 0, duration: 200 });
     cornerGlows.forEach(c => mainScene.tweens.add({ targets: c, alpha: 0, duration: 200 }));
-    if (powerupHudBg) powerupHudBg.setVisible(false);
-    if (powerupTimerText) powerupTimerText.setVisible(false);
+    hidePowerupHud();
 }
 const POWERUP_NAMES = {
     powerup_shield: 'מגן',
     powerup_speed: 'מהירות'
 };
+
+// The active-powerup indicator lives in the DOM HUD row (inside the frame), not
+// on the Phaser overlay, so it never floats over the playfield. It shows the
+// powerup name and a live seconds countdown, and hides when nothing is active.
+function showPowerupHud(name, color) {
+    if (!domElements.powerupSlot) return;
+    domElements.powerupLabel.innerText = name;
+    domElements.powerupLabel.style.color = color;
+    domElements.powerupTimer.style.color = color;
+    domElements.powerupDivider.style.display = '';
+    domElements.powerupSlot.style.display = '';
+}
+
+function setPowerupTimer(seconds, color) {
+    if (!domElements.powerupTimer) return;
+    domElements.powerupTimer.innerText = seconds;
+    domElements.powerupTimer.style.color = color;
+}
+
+function hidePowerupHud() {
+    if (!domElements.powerupSlot) return;
+    domElements.powerupSlot.style.display = 'none';
+    domElements.powerupDivider.style.display = 'none';
+}
 
 function applyPowerup(key) {
     let pickAnchor = to3DScreen(player.x + TILE_SIZE / 2, player.y + TILE_SIZE / 2);
@@ -1554,22 +1561,16 @@ function applyPowerup(key) {
             activePowerups.shieldCornerTweens.push(tw);
         });
         
-        // Show HUD bar and pulse
-        if (powerupHudBg) powerupHudBg.setVisible(true);
-        if (powerupTimerText) powerupTimerText.setVisible(true);
-        let timerTween = mainScene.tweens.add({ targets: powerupTimerText, scale: { from: 1, to: 1.05 }, duration: 400, yoyo: true, repeat: -1 });
-        activePowerups.shieldTimerTween = timerTween;
-        
-        // Update bar each frame
+        // Show the powerup indicator in the HUD frame (throb is CSS-driven).
+        showPowerupHud('מגן', '#00ff94');
+
+        // Update the countdown each frame
         activePowerups.shieldUpdateBar = () => {
             let elapsed = mainScene.time.now - activePowerups.shieldStartTime;
             let remaining = Math.max(0, activePowerups.shieldDuration - elapsed);
             let percent = remaining / activePowerups.shieldDuration;
-            
-            if (powerupTimerText) {
-                powerupTimerText.setText(`מגן ${Math.ceil(remaining / 1000)} שנ׳`);
-                powerupTimerText.setColor(percent > 0.2 ? '#00ff00' : '#ff6600');
-            }
+
+            setPowerupTimer(Math.ceil(remaining / 1000), percent > 0.2 ? '#00ff94' : '#ff6600');
         };
         mainScene.events.on('update', activePowerups.shieldUpdateBar);
 
@@ -1627,22 +1628,16 @@ function applyPowerup(key) {
             activePowerups.speedCornerTweens.push(tw);
         });
         
-        // Show HUD bar and pulse
-        if (powerupHudBg) powerupHudBg.setVisible(true);
-        if (powerupTimerText) powerupTimerText.setVisible(true);
-        let timerTween = mainScene.tweens.add({ targets: powerupTimerText, scale: { from: 1, to: 1.05 }, duration: 380, yoyo: true, repeat: -1 });
-        activePowerups.speedTimerTween = timerTween;
-        
-        // Update bar each frame
+        // Show the powerup indicator in the HUD frame (throb is CSS-driven).
+        showPowerupHud('מהירות', '#ff00ff');
+
+        // Update the countdown each frame
         activePowerups.speedUpdateBar = () => {
             let elapsed = mainScene.time.now - activePowerups.speedStartTime;
             let remaining = Math.max(0, activePowerups.speedDuration - elapsed);
             let percent = remaining / activePowerups.speedDuration;
-            
-            if (powerupTimerText) {
-                powerupTimerText.setText(`מהירות ${Math.ceil(remaining / 1000)} שנ׳`);
-                powerupTimerText.setColor(percent > 0.2 ? '#ff00ff' : '#ffaa00');
-            }
+
+            setPowerupTimer(Math.ceil(remaining / 1000), percent > 0.2 ? '#ff00ff' : '#ffaa00');
         };
         mainScene.events.on('update', activePowerups.speedUpdateBar);
 
