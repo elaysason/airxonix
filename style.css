@@ -164,10 +164,11 @@ body::before {
 .hud-percent { white-space: nowrap; color: #42606a; font-size: 13px; direction: ltr; }
 #percent-text { color: #f2fdff; font-size: 25px; font-weight: 800; line-height: 1; text-shadow: 0 0 14px rgba(147, 238, 255, 0.32); }
 
-/* Active-powerup slot: a gentle throb replaces the old Phaser scale tween.
-   The countdown number's colour is set from JS (warns orange when low). */
-#powerup-slot { animation: powerup-throb 0.85s ease-in-out infinite; transform-origin: center; }
-#powerup-timer { font-size: 22px; }
+/* Active-powerup slots (one per powerup type): a gentle throb replaces the old
+   Phaser scale tween. The countdown number's colour is set from JS (warns
+   orange when low). */
+.powerup-slot { animation: powerup-throb 0.85s ease-in-out infinite; transform-origin: center; }
+.powerup-slot .hud-value { font-size: 22px; }
 @keyframes powerup-throb { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
 
 /* The Popup Container */

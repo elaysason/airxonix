@@ -79,11 +79,15 @@ const domElements = {
     deathReason: null,
     bestScoreLine: null,
     startBest: null,
-    levelScore: null,
-    powerupSlot: null,
-    powerupDivider: null,
-    powerupLabel: null,
-    powerupTimer: null
+    levelScore: null
+};
+
+// One HUD indicator per powerup type, so shield and speed each get their own
+// slot in the frame and never fight over a single element. Element refs are
+// filled in once the DOM is cached (see below).
+const powerupHud = {
+    powerup_shield: { color: '#00ff94', warn: '#ff6600', slot: null, divider: null, label: null, timer: null },
+    powerup_speed:  { color: '#ff00ff', warn: '#ffaa00', slot: null, divider: null, label: null, timer: null }
 };
 
 // Persistent high score (best score + highest level reached)
@@ -274,10 +278,14 @@ function create() {
         domElements.bestScoreLine = document.getElementById('best-score-line');
         domElements.startBest = document.getElementById('start-best');
         domElements.levelScore = document.getElementById('level-score');
-        domElements.powerupSlot = document.getElementById('powerup-slot');
-        domElements.powerupDivider = document.getElementById('powerup-divider');
-        domElements.powerupLabel = document.getElementById('powerup-label');
-        domElements.powerupTimer = document.getElementById('powerup-timer');
+        powerupHud.powerup_shield.slot = document.getElementById('pu-shield-slot');
+        powerupHud.powerup_shield.divider = document.getElementById('pu-shield-divider');
+        powerupHud.powerup_shield.label = document.getElementById('pu-shield-label');
+        powerupHud.powerup_shield.timer = document.getElementById('pu-shield-timer');
+        powerupHud.powerup_speed.slot = document.getElementById('pu-speed-slot');
+        powerupHud.powerup_speed.divider = document.getElementById('pu-speed-divider');
+        powerupHud.powerup_speed.label = document.getElementById('pu-speed-label');
+        powerupHud.powerup_speed.timer = document.getElementById('pu-speed-timer');
     }
     
     // Pause game until start button is clicked
@@ -313,8 +321,9 @@ function create() {
     if(domElements.levelText) {
         domElements.levelText.innerText = level;
     }
-    // No powerup is active on a fresh level, so clear the HUD indicator.
-    hidePowerupHud();
+    // No powerup is active on a fresh level, so clear both HUD indicators.
+    hidePowerupHud('powerup_shield');
+    hidePowerupHud('powerup_speed');
 
     // Drop 3D meshes belonging to the previous scene and replay capture pop-ups.
     if (window.Render3D) window.Render3D.reset();
@@ -1447,7 +1456,7 @@ function clearShieldPowerup() {
     if (activePowerups.shieldCornerTweens) { activePowerups.shieldCornerTweens.forEach(tw => tw.stop()); delete activePowerups.shieldCornerTweens; }
     mainScene.tweens.add({ targets: screenTintShield, alpha: 0, duration: 200 });
     cornerGlows.forEach(c => mainScene.tweens.add({ targets: c, alpha: 0, duration: 200 }));
-    hidePowerupHud();
+    hidePowerupHud('powerup_shield');
 }
 
 // Tear down all Speed powerup state/visuals. Idempotent + safe to call on re-pickup.
@@ -1462,35 +1471,38 @@ function clearSpeedPowerup() {
     if (activePowerups.speedCornerTweens) { activePowerups.speedCornerTweens.forEach(tw => tw.stop()); delete activePowerups.speedCornerTweens; }
     mainScene.tweens.add({ targets: screenTintSpeed, alpha: 0, duration: 200 });
     cornerGlows.forEach(c => mainScene.tweens.add({ targets: c, alpha: 0, duration: 200 }));
-    hidePowerupHud();
+    hidePowerupHud('powerup_speed');
 }
 const POWERUP_NAMES = {
     powerup_shield: 'מגן',
     powerup_speed: 'מהירות'
 };
 
-// The active-powerup indicator lives in the DOM HUD row (inside the frame), not
-// on the Phaser overlay, so it never floats over the playfield. It shows the
-// powerup name and a live seconds countdown, and hides when nothing is active.
-function showPowerupHud(name, color) {
-    if (!domElements.powerupSlot) return;
-    domElements.powerupLabel.innerText = name;
-    domElements.powerupLabel.style.color = color;
-    domElements.powerupTimer.style.color = color;
-    domElements.powerupDivider.style.display = '';
-    domElements.powerupSlot.style.display = '';
+// The active-powerup indicators live in the DOM HUD row (inside the frame), not
+// on the Phaser overlay, so they never float over the playfield. Each powerup
+// type has its own slot (name + live seconds countdown) that shows while active
+// and hides when it ends.
+function showPowerupHud(key) {
+    const g = powerupHud[key];
+    if (!g || !g.slot) return;
+    g.label.style.color = g.color;
+    g.timer.style.color = g.color;
+    g.divider.style.display = '';
+    g.slot.style.display = '';
 }
 
-function setPowerupTimer(seconds, color) {
-    if (!domElements.powerupTimer) return;
-    domElements.powerupTimer.innerText = seconds;
-    domElements.powerupTimer.style.color = color;
+function setPowerupTimer(key, seconds, low) {
+    const g = powerupHud[key];
+    if (!g || !g.timer) return;
+    g.timer.innerText = seconds;
+    g.timer.style.color = low ? g.warn : g.color;
 }
 
-function hidePowerupHud() {
-    if (!domElements.powerupSlot) return;
-    domElements.powerupSlot.style.display = 'none';
-    domElements.powerupDivider.style.display = 'none';
+function hidePowerupHud(key) {
+    const g = powerupHud[key];
+    if (!g || !g.slot) return;
+    g.slot.style.display = 'none';
+    g.divider.style.display = 'none';
 }
 
 function applyPowerup(key) {
@@ -1561,8 +1573,8 @@ function applyPowerup(key) {
             activePowerups.shieldCornerTweens.push(tw);
         });
         
-        // Show the powerup indicator in the HUD frame (throb is CSS-driven).
-        showPowerupHud('מגן', '#00ff94');
+        // Show the shield indicator in the HUD frame (throb is CSS-driven).
+        showPowerupHud('powerup_shield');
 
         // Update the countdown each frame
         activePowerups.shieldUpdateBar = () => {
@@ -1570,7 +1582,7 @@ function applyPowerup(key) {
             let remaining = Math.max(0, activePowerups.shieldDuration - elapsed);
             let percent = remaining / activePowerups.shieldDuration;
 
-            setPowerupTimer(Math.ceil(remaining / 1000), percent > 0.2 ? '#00ff94' : '#ff6600');
+            setPowerupTimer('powerup_shield', Math.ceil(remaining / 1000), percent <= 0.2);
         };
         mainScene.events.on('update', activePowerups.shieldUpdateBar);
 
@@ -1628,8 +1640,8 @@ function applyPowerup(key) {
             activePowerups.speedCornerTweens.push(tw);
         });
         
-        // Show the powerup indicator in the HUD frame (throb is CSS-driven).
-        showPowerupHud('מהירות', '#ff00ff');
+        // Show the speed indicator in the HUD frame (throb is CSS-driven).
+        showPowerupHud('powerup_speed');
 
         // Update the countdown each frame
         activePowerups.speedUpdateBar = () => {
@@ -1637,7 +1649,7 @@ function applyPowerup(key) {
             let remaining = Math.max(0, activePowerups.speedDuration - elapsed);
             let percent = remaining / activePowerups.speedDuration;
 
-            setPowerupTimer(Math.ceil(remaining / 1000), percent > 0.2 ? '#ff00ff' : '#ffaa00');
+            setPowerupTimer('powerup_speed', Math.ceil(remaining / 1000), percent <= 0.2);
         };
         mainScene.events.on('update', activePowerups.speedUpdateBar);
 

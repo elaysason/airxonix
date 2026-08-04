@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>היידאטה אייר-קסוניקס</title>
-    <link rel="stylesheet" href="style.css?v=powerup-hud-1">
+    <link rel="stylesheet" href="style.css?v=powerup-hud-2">
     <style>
         /* Objective bar: calm green normally; ignites into fire on a BIG CAPTURE */
         #objective-progress {
@@ -110,12 +110,19 @@
                         </div>
                     </div>
 
-                    <!-- Active powerup: shown in the frame only while a powerup
-                         is running, so nothing floats over the playfield. -->
-                    <div class="hud-divider" id="powerup-divider" style="display:none"></div>
-                    <div class="hud-stat" id="powerup-slot" style="display:none">
-                        <div class="hud-label" id="powerup-label">מגן</div>
-                        <div id="powerup-timer" class="hud-value">0</div>
+                    <!-- Active powerups: one independent slot per type, each
+                         shown in the frame only while that powerup is running,
+                         so nothing floats over the playfield. -->
+                    <div class="hud-divider powerup-divider" id="pu-shield-divider" style="display:none"></div>
+                    <div class="hud-stat powerup-slot" id="pu-shield-slot" style="display:none">
+                        <div class="hud-label" id="pu-shield-label">מגן</div>
+                        <div id="pu-shield-timer" class="hud-value">0</div>
+                    </div>
+
+                    <div class="hud-divider powerup-divider" id="pu-speed-divider" style="display:none"></div>
+                    <div class="hud-stat powerup-slot" id="pu-speed-slot" style="display:none">
+                        <div class="hud-label" id="pu-speed-label">מהירות</div>
+                        <div id="pu-speed-timer" class="hud-value">0</div>
                     </div>
 
                 </div>
@@ -137,7 +144,7 @@
     </div>
 
     <script src="render3d.js?v=land-capture-1"></script>
-    <script src="game.js?v=powerup-hud-1"></script>
+    <script src="game.js?v=powerup-hud-2"></script>
 
     <script>
         // Scale the shell (HUD + frame as one unit) down to fit the viewport.
